@@ -1,0 +1,48 @@
+# Example rendered output from helm/monitoring chart. Managed by ArgoCD via helm/argocd-apps.
+---
+# Helm values for kube-prometheus-stack
+# Deployed via ArgoCD (see argocd/applications/dev/monitoring.yaml)
+#
+# Install:
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm upgrade --install kube-prometheus prometheus-community/kube-prometheus-stack \
+#     -n monitoring --create-namespace -f kube-prometheus-values.yaml
+
+prometheus:
+  prometheusSpec:
+    # Scrape ServiceMonitors from all namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    serviceMonitorSelector: {}
+
+    # Retain 30 days of metrics
+    retention: 30d
+    retentionSize: 20GB
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          resources:
+            requests:
+              storage: 25Gi
+
+grafana:
+  enabled: true
+  adminPassword: CHANGEME   # override via external secret in real envs
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: hadoop-demo
+          orgId: 1
+          folder: "Hadoop Demo"
+          type: file
+          disableDeletion: false
+          options:
+            path: /var/lib/grafana/dashboards/hadoop-demo
+  dashboardsConfigMaps:
+    hadoop-demo: grafana-dashboards
+
+alertmanager:
+  enabled: true

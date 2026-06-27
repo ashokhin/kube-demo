@@ -1,0 +1,28 @@
+---
+# Example output of: helm template risk-ui 006_gitops/helm/risk-ui --set kubernetes.enabled=true
+# Role and RoleBinding are managed by the Helm chart (templates/rbac.yaml).
+# Do not apply manually — ArgoCD manages these resources.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: risk-ui-job-launcher
+  namespace: hadoop-demo-dev
+rules:
+  # Minimum permissions needed to launch and monitor spark-calculator Jobs.
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: risk-ui-job-launcher
+  namespace: hadoop-demo-dev
+subjects:
+  - kind: ServiceAccount
+    name: risk-ui
+    namespace: hadoop-demo-dev
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: risk-ui-job-launcher

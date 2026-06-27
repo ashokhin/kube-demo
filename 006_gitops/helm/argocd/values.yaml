@@ -1,0 +1,100 @@
+---
+argo-cd:
+  # ArgoCD server — TLS is handled upstream by Traefik (passthrough) + HAProxy,
+  # so the server itself serves TLS directly without termination.
+  server:
+    # Expose via Traefik IngressRouteTCP (defined in extraObjects below)
+    service:
+      type: ClusterIP
+
+  # Reduce resource footprint for a single-node demo cluster
+  controller:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1536Mi
+
+  repoServer:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  redis:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  dex:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 50m
+        memory: 64Mi
+
+  notifications:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 50m
+        memory: 64Mi
+
+  applicationSet:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 50m
+        memory: 64Mi
+
+  configs:
+    cm:
+      timeout.reconciliation: 60s
+
+    params:
+      # Increase timeout for helm dependency build (large charts like kube-prometheus-stack)
+      server.repo.server.timeout.seconds: "300"
+
+    # Register Helm repositories so ArgoCD can run helm dependency build for wrapper charts
+    repositories:
+      prometheus-community:
+        url: https://prometheus-community.github.io/helm-charts
+        name: prometheus-community
+        type: helm
+      grafana:
+        url: https://grafana.github.io/helm-charts
+        name: grafana
+        type: helm
+
+  # Traefik IngressRouteTCP — TLS passthrough, HAProxy → Traefik → argocd-server:443
+  extraObjects:
+    - apiVersion: traefik.io/v1alpha1
+      kind: IngressRouteTCP
+      metadata:
+        name: argocd
+        namespace: argocd
+      spec:
+        entryPoints:
+          - websecure
+        routes:
+          - match: HostSNI(`argocd.company.internal`)
+            services:
+              - name: argocd-server
+                port: 443
+        tls:
+          passthrough: true

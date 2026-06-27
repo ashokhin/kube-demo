@@ -1,0 +1,26 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: spark-calculator-dev
+  namespace: argocd
+spec:
+  project: hadoop-demo
+  source:
+    repoURL: "git@bitbucket.company.internal:devops/hadoop-demo-gitops.git"
+    targetRevision: HEAD
+    path: helm/spark-calculator
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-spark-submit.yaml   # dev uses in-pod submit mode
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hadoop-demo-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

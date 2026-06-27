@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kafka
+description: Kafka broker in KRaft mode (no ZooKeeper) for hadoop-demo dev cluster
+type: application
+version: 0.1.0
+appVersion: "3.9.0"

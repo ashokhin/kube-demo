@@ -1,0 +1,28 @@
+---
+image:
+  repository: 192.168.122.76:30500/risk-engine
+  tag: "latest"
+  pullPolicy: Always
+
+replicaCount: 1
+
+config:
+  LOG_LEVEL: "DEBUG"
+  PORT: "8081"
+  # Master switch is off — each subsystem is controlled individually.
+  MOCK_MODE: "false"
+  KAFKA_MOCK_MODE: "false"
+  HDFS_MOCK_MODE: "true"
+  HIVE_MOCK_MODE: "true"
+
+krb5:
+  enabled: false
+
+hadoop:
+  enabled: false
+
+migrate:
+  enabled: false
+
+serviceMonitor:
+  enabled: false

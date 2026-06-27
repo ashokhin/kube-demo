@@ -1,0 +1,203 @@
+# =============================================================================
+# hadoop-demo docker-compose.yaml
+#
+# MOCK_MODE=true replaces all Hadoop/Oracle connections with in-process stubs.
+# No real HDFS, Hive, Spark, Kafka, or Oracle installation required for local dev.
+#
+# Usage:
+#   Start long-running services:     docker compose up -d
+#   Run spark job (one-off):         docker compose --profile jobs run --rm spark-calculator
+#   Run oracle report (one-off):     docker compose --profile reports run --rm oracle-reporter
+#   Or use the Makefile shortcuts:   make up / make spark-job / make report
+#
+# Services:
+#   kafka           — Kafka broker (KRaft, no Zookeeper) for risk-jobs / risk-results topics
+#   risk-ui         — Spring Boot REST API + Kafka producer
+#   risk-engine     — Python FastAPI + Kafka consumer + VaR calculation
+#   stream-ingestor — Spark Structured Streaming (Kafka → HDFS/Hive), profile: streaming
+#   spark-calculator — PySpark job (on-demand), profile: jobs
+#   oracle-reporter  — CronJob (on-demand), profile: reports
+#
+# PASSWORDS: All secrets are CHANGEME — FOR DEMO/LOCAL USE ONLY.
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Kafka broker — KRaft mode (no Zookeeper)
+  # Topics: risk-jobs (risk-ui → risk-engine), risk-results (risk-engine → stream-ingestor)
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.7.0
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: "3"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+    ports:
+      - "9092:9092"
+    networks:
+      - hadoop-demo
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # 001 risk-ui — Spring Boot REST API + Kafka producer
+  # POST /api/jobs/async → publishes to Kafka topic risk-jobs
+  # POST /api/jobs/spark → launches K8s Job (disabled in local mode)
+  # POST /api/calculate  → direct REST call to risk-engine
+  # ---------------------------------------------------------------------------
+  risk-ui:
+    build:
+      context: ./001_risk-ui
+      dockerfile: Dockerfile
+    environment:
+      RISK_ENGINE_URL: http://risk-engine:8081
+      KUBERNETES_ENABLED: "false"
+      PORT: "8080"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC_RISK_JOBS: risk-jobs
+    ports:
+      - "8080:8080"
+    networks:
+      - hadoop-demo
+    depends_on:
+      kafka:
+        condition: service_healthy
+      risk-engine:
+        condition: service_started
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # 002 risk-engine — FastAPI + Kafka consumer (daemon thread) + VaR calculation
+  # Consumes risk-jobs, publishes results to risk-results.
+  # MOCK_MODE=true: HDFS/Hive replaced with stubs; Kafka consumer simulated.
+  # ---------------------------------------------------------------------------
+  risk-engine:
+    build:
+      context: ./002_risk-engine
+      dockerfile: Dockerfile
+    environment:
+      MOCK_MODE: "true"
+      LOG_LEVEL: DEBUG
+      PORT: "8081"
+      HDFS_URL: hdfs://namenode:8020
+      HIVE_HOST: hive-server
+      HIVE_PORT: "10000"
+      HIVE_DATABASE: risk
+      KRB5_KEYTAB_PATH: /keytab/risk-engine.keytab
+      KRB5_PRINCIPAL: risk-engine@EXAMPLE.COM
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC_RISK_JOBS: risk-jobs
+      KAFKA_TOPIC_RISK_RESULTS: risk-results
+      KAFKA_CONSUMER_GROUP: risk-engine-group
+    ports:
+      - "8081:8081"
+    networks:
+      - hadoop-demo
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # 005 stream-ingestor — Spark Structured Streaming
+  # Reads risk-results topic → aggregates → writes to HDFS Parquet + Hive.
+  # In MOCK_MODE runs a single simulated batch and exits cleanly.
+  # Profile: streaming — not started by default (requires more memory for Spark).
+  # ---------------------------------------------------------------------------
+  stream-ingestor:
+    build:
+      context: ./005_stream-ingestor
+      dockerfile: Dockerfile
+    profiles:
+      - streaming
+    environment:
+      MOCK_MODE: "true"
+      LOG_LEVEL: DEBUG
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC_RISK_RESULTS: risk-results
+      KAFKA_CONSUMER_GROUP: stream-ingestor-group
+      HDFS_URL: hdfs://namenode:8020
+      HDFS_OUTPUT_PATH: /data/risk-aggregates
+      HIVE_HOST: hive-server
+      HIVE_PORT: "10000"
+      HIVE_DATABASE: risk
+      KRB5_KEYTAB_PATH: /keytab/stream-ingestor.keytab
+      KRB5_PRINCIPAL: stream-ingestor@EXAMPLE.COM
+      TRIGGER_INTERVAL_SECONDS: "30"
+      METRICS_PORT: "9090"
+    ports:
+      - "9090:9090"
+    networks:
+      - hadoop-demo
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # 003 spark-calculator — PySpark job, launched on demand.
+  # Locally: make spark-job  or  docker compose --profile jobs run --rm spark-calculator
+  # ---------------------------------------------------------------------------
+  spark-calculator:
+    build:
+      context: ./003_spark-calculator
+      dockerfile: Dockerfile
+    profiles:
+      - jobs
+    environment:
+      MOCK_MODE: "true"
+      LOG_LEVEL: DEBUG
+      SPARK_MODE: submit
+      HIVE_HOST: hive-server
+      HIVE_PORT: "10000"
+      HIVE_DATABASE: risk
+      ORACLE_DSN: localhost:1521/ORCLPDB1
+      ORACLE_USER: risk_user
+      ORACLE_PASSWORD: CHANGEME
+      KRB5_KEYTAB_PATH: /keytab/spark-calculator.keytab
+      KRB5_PRINCIPAL: spark-calc@EXAMPLE.COM
+      MODEL_VERSION: "v1.0"
+      PORTFOLIO_ID: "demo-portfolio"
+      SCENARIO: "base"
+    networks:
+      - hadoop-demo
+
+  # ---------------------------------------------------------------------------
+  # 004 oracle-reporter — reads Oracle, renders HTML, writes to HDFS.
+  # Locally: make report  or  docker compose --profile reports run --rm oracle-reporter
+  # ---------------------------------------------------------------------------
+  oracle-reporter:
+    build:
+      context: ./004_oracle-reporter
+      dockerfile: Dockerfile
+    profiles:
+      - reports
+    environment:
+      MOCK_MODE: "true"
+      LOG_LEVEL: DEBUG
+      ORACLE_DSN: localhost:1521/ORCLPDB1
+      ORACLE_USER: reporter_user
+      ORACLE_PASSWORD: CHANGEME
+      HDFS_URL: hdfs://namenode:8020
+      HDFS_OUTPUT_PATH: /data/reports
+      KRB5_KEYTAB_PATH: /keytab/oracle-reporter.keytab
+      KRB5_PRINCIPAL: oracle-reporter@EXAMPLE.COM
+    networks:
+      - hadoop-demo
+
+networks:
+  hadoop-demo:
+    driver: bridge

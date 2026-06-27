@@ -1,0 +1,37 @@
+---
+image:
+  repository: 192.168.122.76:30500/stream-ingestor
+  tag: "latest"
+  pullPolicy: Always
+
+config:
+  LOG_LEVEL: "DEBUG"
+  # Master switch is off — each subsystem is controlled individually.
+  MOCK_MODE: "false"
+  KAFKA_MOCK_MODE: "false"
+  HDFS_MOCK_MODE: "true"
+  HIVE_MOCK_MODE: "true"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  KAFKA_TOPIC_RISK_RESULTS: "risk-results"
+  KAFKA_CONSUMER_GROUP: "stream-ingestor-group"
+  TRIGGER_INTERVAL_SECONDS: "10"
+
+krb5:
+  enabled: false
+
+hadoop:
+  enabled: false
+
+migrate:
+  enabled: false
+
+serviceMonitor:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi

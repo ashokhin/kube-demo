@@ -1,0 +1,48 @@
+---
+image:
+  repository: nexus.company.internal/hadoop-demo/stream-ingestor
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+config:
+  LOG_LEVEL: "INFO"
+  MOCK_MODE: "false"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka.kafka.svc.cluster.local:9092"
+  KAFKA_TOPIC_RISK_RESULTS: "risk-results"
+  KAFKA_CONSUMER_GROUP: "stream-ingestor-group"
+  HDFS_URL: "hdfs://namenode.hadoop.internal:8020"
+  HDFS_OUTPUT_PATH: "/data/risk-aggregates"
+  HIVE_HOST: "hive.hadoop.internal"
+  HIVE_PORT: "10000"
+  HIVE_DATABASE: "risk"
+  KRB5_KEYTAB_PATH: "/keytab/stream-ingestor.keytab"
+  KRB5_PRINCIPAL: "stream-ingestor@EXAMPLE.COM"
+  KRB5CCNAME: "/tmp/krb5/tgt"
+  TRIGGER_INTERVAL_SECONDS: "30"
+  METRICS_PORT: "9090"
+
+krb5Init:
+  image: debian:bookworm-slim
+
+krb5:
+  principal: "stream-ingestor@EXAMPLE.COM"
+
+migrate:
+  enabled: true
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi     # Spark driver needs at least 1.5Gi heap
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+
+krb5:
+  enabled: true
+
+hadoop:
+  enabled: true
+
+serviceMonitor:
+  enabled: true

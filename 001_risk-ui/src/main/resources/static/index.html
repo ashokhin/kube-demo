@@ -1,0 +1,836 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Risk Job Launcher</title>
+<style>
+  :root {
+    --bg:           #F6F8FA;
+    --surface:      #FFFFFF;
+    --border:       #D0D7DE;
+    --border-focus: #0969DA;
+    --text:         #1F2328;
+    --text-muted:   #656D76;
+    --accent:       #1F6FEB;
+    --accent-hover: #1158C7;
+    --accent-fg:    #FFFFFF;
+    --tag-calc-bg:  #DDF4FF;
+    --tag-calc-fg:  #0550AE;
+    --tag-spark-bg: #FFF8C5;
+    --tag-spark-fg: #7D4E00;
+    --tag-async-bg: #DAFBE1;
+    --tag-async-fg: #116329;
+    --ok:           #1A7F37;
+    --ok-bg:        #DAFBE1;
+    --err:          #CF222E;
+    --err-bg:       #FFEBE9;
+    --warn-bg:      #FFF8C5;
+    --warn-fg:      #7D4E00;
+    --input-bg:     #FFFFFF;
+    --mono:         "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace;
+    --sans:         -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --radius:       6px;
+    --shadow:       0 1px 3px rgba(31,35,40,.12), 0 1px 2px rgba(31,35,40,.08);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:           #0D1117;
+      --surface:      #161B22;
+      --border:       #30363D;
+      --border-focus: #388BFD;
+      --text:         #E6EDF3;
+      --text-muted:   #8B949E;
+      --accent:       #388BFD;
+      --accent-hover: #58A6FF;
+      --accent-fg:    #0D1117;
+      --tag-calc-bg:  #0C2D6B;
+      --tag-calc-fg:  #79C0FF;
+      --tag-spark-bg: #2D1F00;
+      --tag-spark-fg: #E3B341;
+      --tag-async-bg: #0A2D1F;
+      --tag-async-fg: #56D364;
+      --ok:           #3FB950;
+      --ok-bg:        #0A2D1F;
+      --err:          #F85149;
+      --err-bg:       #2D1317;
+      --warn-bg:      #2D1F00;
+      --warn-fg:      #E3B341;
+      --input-bg:     #0D1117;
+      --shadow:       0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+    }
+  }
+
+  :root[data-theme="light"] {
+    --bg:           #F6F8FA;
+    --surface:      #FFFFFF;
+    --border:       #D0D7DE;
+    --border-focus: #0969DA;
+    --text:         #1F2328;
+    --text-muted:   #656D76;
+    --accent:       #1F6FEB;
+    --accent-hover: #1158C7;
+    --accent-fg:    #FFFFFF;
+    --tag-calc-bg:  #DDF4FF;
+    --tag-calc-fg:  #0550AE;
+    --tag-spark-bg: #FFF8C5;
+    --tag-spark-fg: #7D4E00;
+    --tag-async-bg: #DAFBE1;
+    --tag-async-fg: #116329;
+    --ok:           #1A7F37;
+    --ok-bg:        #DAFBE1;
+    --err:          #CF222E;
+    --err-bg:       #FFEBE9;
+    --warn-bg:      #FFF8C5;
+    --warn-fg:      #7D4E00;
+    --input-bg:     #FFFFFF;
+    --shadow:       0 1px 3px rgba(31,35,40,.12), 0 1px 2px rgba(31,35,40,.08);
+  }
+
+  :root[data-theme="dark"] {
+    --bg:           #0D1117;
+    --surface:      #161B22;
+    --border:       #30363D;
+    --border-focus: #388BFD;
+    --text:         #E6EDF3;
+    --text-muted:   #8B949E;
+    --accent:       #388BFD;
+    --accent-hover: #58A6FF;
+    --accent-fg:    #0D1117;
+    --tag-calc-bg:  #0C2D6B;
+    --tag-calc-fg:  #79C0FF;
+    --tag-spark-bg: #2D1F00;
+    --tag-spark-fg: #E3B341;
+    --tag-async-bg: #0A2D1F;
+    --tag-async-fg: #56D364;
+    --ok:           #3FB950;
+    --ok-bg:        #0A2D1F;
+    --err:          #F85149;
+    --err-bg:       #2D1317;
+    --warn-bg:      #2D1F00;
+    --warn-fg:      #E3B341;
+    --input-bg:     #0D1117;
+    --shadow:       0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 16px 64px;
+  }
+
+  header {
+    max-width: 680px;
+    margin: 0 auto 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo {
+    width: 32px;
+    height: 32px;
+    background: var(--accent);
+    border-radius: var(--radius);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+
+  .logo svg { display: block; }
+
+  .header-text { flex: 1; }
+
+  h1 {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    line-height: 1.2;
+  }
+
+  .header-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  .theme-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 5px 8px;
+    font-size: 13px;
+    line-height: 1;
+    transition: color .15s, border-color .15s;
+  }
+
+  .theme-btn:hover { color: var(--text); border-color: var(--border-focus); }
+
+  .card {
+    max-width: 680px;
+    margin: 0 auto 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab {
+    padding: 11px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color .15s, border-color .15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .tab:hover { color: var(--text); }
+
+  .tab.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+
+  .tab-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 20px;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+  }
+
+  .tab[data-type="calculate"] .tab-badge { background: var(--tag-calc-bg); color: var(--tag-calc-fg); }
+  .tab[data-type="spark"]     .tab-badge { background: var(--tag-spark-bg); color: var(--tag-spark-fg); }
+  .tab[data-type="async"]     .tab-badge { background: var(--tag-async-bg); color: var(--tag-async-fg); }
+
+  .form-body { padding: 20px; }
+
+  .job-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    padding: 8px 10px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    line-height: 1.5;
+  }
+
+  .fields { display: flex; flex-direction: column; gap: 12px; }
+
+  .field { display: flex; flex-direction: column; gap: 4px; }
+
+  label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: .01em;
+  }
+
+  label .required {
+    color: var(--err);
+    margin-left: 2px;
+  }
+
+  label .hint {
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-left: 4px;
+  }
+
+  input, select {
+    font-family: var(--sans);
+    font-size: 14px;
+    color: var(--text);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 7px 10px;
+    width: 100%;
+    transition: border-color .15s, box-shadow .15s;
+    outline: none;
+    appearance: none;
+  }
+
+  input::placeholder { color: var(--text-muted); }
+
+  input:focus, select:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-focus) 20%, transparent);
+  }
+
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238B949E' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+    cursor: pointer;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* Hidden scenario row for Calculate tab */
+  .scenario-row { display: none; }
+
+  .form-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 20px;
+    gap: 12px;
+  }
+
+  .endpoint-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .submit-btn {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-fg);
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    padding: 8px 18px;
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background .15s, opacity .15s;
+  }
+
+  .submit-btn:hover { background: var(--accent-hover); }
+  .submit-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+  .spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    display: none;
+  }
+
+  .submit-btn.loading .spinner { display: block; }
+  .submit-btn.loading .btn-label { display: none; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .response-card { display: none; }
+  .response-card.visible { display: block; }
+
+  .response-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-dot.ok  { background: var(--ok); }
+  .status-dot.err { background: var(--err); }
+
+  .status-text {
+    font-size: 12px;
+    font-weight: 600;
+    flex: 1;
+  }
+
+  .status-text.ok  { color: var(--ok); }
+  .status-text.err { color: var(--err); }
+
+  .status-code {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .response-time {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .response-body {
+    padding: 14px 16px;
+    overflow-x: auto;
+  }
+
+  pre {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+  }
+
+  /* JSON syntax highlight */
+  .json-key    { color: #79C0FF; }
+  .json-str    { color: #A5D6FF; }
+  .json-num    { color: #79C0FF; }
+  .json-bool   { color: #FF7B72; }
+  .json-null   { color: #8B949E; }
+
+  :root[data-theme="light"] .json-key  { color: #0550AE; }
+  :root[data-theme="light"] .json-str  { color: #0A3069; }
+  :root[data-theme="light"] .json-num  { color: #0550AE; }
+  :root[data-theme="light"] .json-bool { color: #CF222E; }
+  :root[data-theme="light"] .json-null { color: #6E7781; }
+
+  @media (prefers-color-scheme: light) {
+    .json-key  { color: #0550AE; }
+    .json-str  { color: #0A3069; }
+    .json-num  { color: #0550AE; }
+    .json-bool { color: #CF222E; }
+    .json-null { color: #6E7781; }
+  }
+
+  .history-section {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+
+  .history-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    padding: 0 2px;
+  }
+
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .history-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color .15s;
+  }
+
+  .history-item:hover { border-color: var(--border-focus); }
+
+  .history-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .history-dot.ok  { background: var(--ok); }
+  .history-dot.err { background: var(--err); }
+
+  .history-type {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+
+  [data-type="calculate"] .history-type { background: var(--tag-calc-bg); color: var(--tag-calc-fg); }
+  [data-type="spark"]     .history-type { background: var(--tag-spark-bg); color: var(--tag-spark-fg); }
+  [data-type="async"]     .history-type { background: var(--tag-async-bg); color: var(--tag-async-fg); }
+
+  .history-params {
+    flex: 1;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .history-time {
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 480px) {
+    .two-col { grid-template-columns: 1fr; }
+    .form-footer { flex-direction: column; align-items: stretch; }
+    .submit-btn { justify-content: center; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="9" width="3" height="7" rx="1" fill="white" opacity=".7"/>
+      <rect x="7" y="5" width="3" height="11" rx="1" fill="white" opacity=".85"/>
+      <rect x="12" y="2" width="3" height="14" rx="1" fill="white"/>
+      <path d="M3.5 8L8.5 5L13.5 2" stroke="white" stroke-width="1.2" stroke-linecap="round" opacity=".5"/>
+    </svg>
+  </div>
+  <div class="header-text">
+    <h1>Risk Job Launcher</h1>
+    <div class="header-sub">risk-ui · hadoop-demo</div>
+  </div>
+  <button class="theme-btn" id="themeToggle" aria-label="Toggle theme">☀︎</button>
+</header>
+
+<div class="card">
+  <!-- Job type tabs -->
+  <div class="tabs" role="tablist">
+    <button class="tab active" role="tab" aria-selected="true"  data-type="calculate" id="tab-calculate">
+      <span class="tab-badge">Sync</span>
+      Calculate
+    </button>
+    <button class="tab" role="tab" aria-selected="false" data-type="spark" id="tab-spark">
+      <span class="tab-badge">K8s Job</span>
+      Spark
+    </button>
+    <button class="tab" role="tab" aria-selected="false" data-type="async" id="tab-async">
+      <span class="tab-badge">Kafka</span>
+      Async
+    </button>
+  </div>
+
+  <!-- Form -->
+  <div class="form-body">
+    <div class="job-desc" id="jobDesc">
+      Synchronous risk calculation via REST. Blocks until the result is returned.
+      Best for small portfolios where a response in under a second is expected.
+    </div>
+
+    <div class="fields">
+      <div class="two-col">
+        <div class="field">
+          <label for="portfolioId">Portfolio ID <span class="required">*</span></label>
+          <input
+            type="text"
+            id="portfolioId"
+            list="portfolioSuggestions"
+            placeholder="e.g. PORTFOLIO_A"
+            autocomplete="off"
+            required
+          >
+          <datalist id="portfolioSuggestions">
+            <option value="PORTFOLIO_A">
+            <option value="PORTFOLIO_B">
+            <option value="PORTFOLIO_C">
+            <option value="PORTFOLIO_HY">
+            <option value="PORTFOLIO_EM">
+          </datalist>
+        </div>
+
+        <div class="field">
+          <label for="modelVersion">Model Version <span class="required">*</span></label>
+          <input
+            type="text"
+            id="modelVersion"
+            list="versionSuggestions"
+            placeholder="e.g. v1.0"
+            autocomplete="off"
+            required
+          >
+          <datalist id="versionSuggestions">
+            <option value="v1.0">
+            <option value="v1.1">
+            <option value="v2.0">
+            <option value="v2.1-beta">
+          </datalist>
+        </div>
+      </div>
+
+      <div class="field scenario-row" id="scenarioRow">
+        <label for="scenario">Scenario <span class="hint">— stress-test configuration</span></label>
+        <select id="scenario">
+          <option value="base">base — normal market conditions</option>
+          <option value="stress">stress — 2008-style shock</option>
+          <option value="adverse">adverse — regulatory adverse scenario</option>
+          <option value="historical">historical — 1998 LTCM replay</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-footer">
+      <span class="endpoint-label" id="endpointLabel">POST /api/calculate</span>
+      <button class="submit-btn" id="submitBtn">
+        <span class="spinner" aria-hidden="true"></span>
+        <span class="btn-label">Run job</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Response -->
+<div class="card response-card" id="responseCard">
+  <div class="response-header">
+    <div class="status-dot" id="statusDot"></div>
+    <div class="status-text" id="statusText"></div>
+    <div class="status-code" id="statusCode"></div>
+    <div class="response-time" id="responseTime"></div>
+  </div>
+  <div class="response-body">
+    <pre id="responseBody"></pre>
+  </div>
+</div>
+
+<!-- History -->
+<div class="history-section" id="historySection" style="display:none">
+  <div class="history-title">Recent jobs</div>
+  <div class="history-list" id="historyList"></div>
+</div>
+
+<script>
+  const root = document.documentElement;
+  const themeBtn = document.getElementById('themeToggle');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+  let currentTheme = prefersDark.matches ? 'dark' : 'light';
+
+  function applyTheme(t) {
+    currentTheme = t;
+    root.dataset.theme = t;
+    themeBtn.textContent = t === 'dark' ? '☀︎' : '☾';
+  }
+
+  applyTheme(currentTheme);
+  themeBtn.addEventListener('click', () => applyTheme(currentTheme === 'dark' ? 'light' : 'dark'));
+
+  const JOB = {
+    calculate: {
+      desc: 'Synchronous risk calculation via REST. Blocks until the result is returned. Best for small portfolios where a response in under a second is expected.',
+      endpoint: 'POST /api/calculate',
+      showScenario: false,
+    },
+    spark: {
+      desc: 'Launches a Kubernetes Job that runs spark-calculator. Risk-ui creates the Job via the Kubernetes API and returns immediately. Best for large portfolios.',
+      endpoint: 'POST /api/jobs/spark',
+      showScenario: true,
+    },
+    async: {
+      desc: 'Publishes a job request to Kafka. risk-engine consumes the topic asynchronously. Caller does not wait for the result — check Hive or Grafana for output.',
+      endpoint: 'POST /api/jobs/async',
+      showScenario: true,
+    },
+  };
+
+  let activeType = 'calculate';
+
+  const tabs = document.querySelectorAll('.tab');
+  const scenarioRow = document.getElementById('scenarioRow');
+  const endpointLabel = document.getElementById('endpointLabel');
+  const jobDesc = document.getElementById('jobDesc');
+
+  function switchTab(type) {
+    activeType = type;
+    tabs.forEach(t => {
+      const active = t.dataset.type === type;
+      t.classList.toggle('active', active);
+      t.setAttribute('aria-selected', active);
+    });
+    const cfg = JOB[type];
+    scenarioRow.style.display = cfg.showScenario ? '' : 'none';
+    endpointLabel.textContent = cfg.endpoint;
+    jobDesc.textContent = cfg.desc;
+  }
+
+  tabs.forEach(tab => tab.addEventListener('click', () => switchTab(tab.dataset.type)));
+
+  const submitBtn = document.getElementById('submitBtn');
+  const portfolioId = document.getElementById('portfolioId');
+  const modelVersion = document.getElementById('modelVersion');
+  const scenario = document.getElementById('scenario');
+
+  submitBtn.addEventListener('click', runJob);
+
+  async function runJob() {
+    const pid = portfolioId.value.trim();
+    const mv  = modelVersion.value.trim();
+
+    if (!pid || !mv) {
+      portfolioId.focus();
+      portfolioId.style.borderColor = 'var(--err)';
+      setTimeout(() => portfolioId.style.borderColor = '', 1500);
+      return;
+    }
+
+    submitBtn.classList.add('loading');
+    submitBtn.disabled = true;
+
+    const t0 = performance.now();
+
+    try {
+      let res;
+      if (activeType === 'calculate') {
+        const params = new URLSearchParams({ portfolioId: pid, modelVersion: mv });
+        res = await fetch(`/api/calculate?${params}`, { method: 'POST' });
+      } else {
+        const sc = scenario.value;
+        res = await fetch(`/api/jobs/${activeType === 'spark' ? 'spark' : 'async'}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ portfolioId: pid, modelVersion: mv, scenario: sc }),
+        });
+      }
+
+      const elapsed = Math.round(performance.now() - t0);
+      let body;
+      try { body = await res.json(); } catch { body = null; }
+
+      showResponse(res.status, body, elapsed);
+      fetchHistory();
+    } catch (err) {
+      const elapsed = Math.round(performance.now() - t0);
+      showResponse(0, { error: err.message }, elapsed);
+    } finally {
+      submitBtn.classList.remove('loading');
+      submitBtn.disabled = false;
+    }
+  }
+
+  const responseCard = document.getElementById('responseCard');
+  const statusDot  = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const statusCode = document.getElementById('statusCode');
+  const responseTime = document.getElementById('responseTime');
+  const responseBody = document.getElementById('responseBody');
+
+  function showResponse(code, body, ms) {
+    const ok = code >= 200 && code < 300;
+    statusDot.className  = `status-dot ${ok ? 'ok' : 'err'}`;
+    statusText.className = `status-text ${ok ? 'ok' : 'err'}`;
+    statusText.textContent = ok ? 'Success' : (code === 0 ? 'Network error' : 'Error');
+    statusCode.textContent = code > 0 ? `HTTP ${code}` : '';
+    responseTime.textContent = `${ms} ms`;
+    responseBody.innerHTML = body !== null ? highlightJson(JSON.stringify(body, null, 2)) : '(empty body)';
+    responseCard.classList.add('visible');
+    responseCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function highlightJson(str) {
+    return str
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(
+        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+        m => {
+          if (/^"/.test(m)) {
+            return /:$/.test(m)
+              ? `<span class="json-key">${m}</span>`
+              : `<span class="json-str">${m}</span>`;
+          }
+          if (/true|false/.test(m)) return `<span class="json-bool">${m}</span>`;
+          if (/null/.test(m))       return `<span class="json-null">${m}</span>`;
+          return `<span class="json-num">${m}</span>`;
+        }
+      );
+  }
+
+  const historySection = document.getElementById('historySection');
+  const historyList    = document.getElementById('historyList');
+
+  async function fetchHistory() {
+    try {
+      const res = await fetch('/api/jobs/history');
+      if (!res.ok) return;
+      const entries = await res.json();
+      renderHistory(entries);
+    } catch { /* backend unreachable — silently skip */ }
+  }
+
+  function renderHistory(entries) {
+    if (!entries.length) return;
+    historySection.style.display = '';
+    historyList.innerHTML = entries.map(h => {
+      const ts = new Date(h.timestamp);
+      const time = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const pid = h.portfolioId ?? '';
+      const mv  = h.modelVersion ?? '';
+      return `
+        <div class="history-item" data-type="${h.type}"
+             data-pid="${pid}" data-mv="${mv}" data-scenario="${h.scenario ?? ''}"
+             tabindex="0" role="button" aria-label="Replay ${h.type} job">
+          <div class="history-dot ${h.success ? 'ok' : 'err'}"></div>
+          <span class="history-type">${h.type}</span>
+          <span class="history-params">${pid} · ${mv}</span>
+          <span class="history-time">${time}</span>
+        </div>
+      `;
+    }).join('');
+
+    historyList.querySelectorAll('.history-item').forEach(el => {
+      const replay = () => {
+        switchTab(el.dataset.type);
+        portfolioId.value = el.dataset.pid;
+        modelVersion.value = el.dataset.mv;
+        if (el.dataset.scenario) scenario.value = el.dataset.scenario;
+        submitBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      };
+      el.addEventListener('click', replay);
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') replay(); });
+    });
+  }
+
+  // Load history on page open
+  fetchHistory();
+
+  [portfolioId, modelVersion].forEach(el =>
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') runJob(); })
+  );
+</script>
+</body>
+</html>

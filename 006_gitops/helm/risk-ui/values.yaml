@@ -1,0 +1,30 @@
+---
+image:
+  repository: nexus.company.internal/hadoop-demo/risk-ui
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+riskEngineUrl: "http://risk-engine:8081"
+sparkCalculatorImage: "nexus.company.internal/hadoop-demo/spark-calculator:0.1.0"
+sparkCalculatorMockMode: "false"
+
+kubernetes:
+  enabled: "true"
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+serviceMonitor:
+  enabled: true

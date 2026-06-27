@@ -1,0 +1,46 @@
+pipeline {
+    agent { label 'docker' }
+
+    environment {
+        SERVICE     = "stream-ingestor"
+        IMAGE       = "nexus.company.internal/hadoop-demo/${SERVICE}"
+        REGISTRY    = credentials('nexus-credentials')
+    }
+
+    stages {
+        stage('Lint') {
+            steps {
+                sh 'pip install ruff && ruff check 005_stream-ingestor/src'
+            }
+        }
+        stage('Test') {
+            steps {
+                sh '''
+                    pip install pyspark pytest pydantic-settings prometheus-client
+                    cd 005_stream-ingestor
+                    MOCK_MODE=true pytest tests/ -v
+                '''
+            }
+        }
+        stage('Build & Push') {
+            steps {
+                sh """
+                    docker build -t ${IMAGE}:${BUILD_NUMBER} 005_stream-ingestor/
+                    docker tag  ${IMAGE}:${BUILD_NUMBER} ${IMAGE}:latest
+                    docker push ${IMAGE}:${BUILD_NUMBER}
+                    docker push ${IMAGE}:latest
+                """
+            }
+        }
+        stage('Update GitOps') {
+            steps {
+                sh """
+                    sed -i 's|tag: .*|tag: "${BUILD_NUMBER}"|' \
+                        006_gitops/helm/stream-ingestor/values-dev.yaml
+                    git commit -am "ci: bump stream-ingestor to ${BUILD_NUMBER}"
+                    git push
+                """
+            }
+        }
+    }
+}

@@ -1,0 +1,26 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: spark-calculator-staging
+  namespace: argocd
+spec:
+  project: hadoop-demo
+  source:
+    repoURL: "git@bitbucket.company.internal:devops/hadoop-demo-gitops.git"
+    targetRevision: HEAD
+    path: helm/spark-calculator
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-spark-operator.yaml  # staging uses Spark Operator for realistic testing
+        - values-staging.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hadoop-demo-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true

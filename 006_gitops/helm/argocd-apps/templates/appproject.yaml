@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: {{ .Values.project.name }}
+  namespace: {{ .Values.argocdNamespace }}
+  # Finalizer prevents accidental deletion while Applications exist
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: {{ .Values.project.description | quote }}
+
+  sourceRepos:
+    - {{ .Values.source.repoURL | quote }}
+
+  destinations:
+    - server: {{ .Values.destination.server }}
+      namespace: "*"
+
+  clusterResourceWhitelist:
+    {{- toYaml .Values.project.clusterResourceWhitelist | nindent 4 }}
+
+  # Allow all namespace-scoped resource types
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

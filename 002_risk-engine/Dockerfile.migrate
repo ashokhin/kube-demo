@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1
+#
+# Hive migration image — based on Apache Hive which includes beeline.
+# Used only in the Kubernetes PreSync Job (argocd.argoproj.io/hook: PreSync).
+# Not used in the main application — kept separate to keep the app image lean.
+
+FROM apache/hive:4.0.0
+
+# Copy migration scripts and the runner
+COPY migrations/ /migrations/
+COPY migrate.sh  /migrate.sh
+
+# krb5.conf will be mounted from a ConfigMap at runtime.
+# The KRB5CCNAME ticket cache will be written by the init container (kinit).
+RUN chmod +x /migrate.sh
+
+USER hive
+
+ENTRYPOINT ["/migrate.sh"]

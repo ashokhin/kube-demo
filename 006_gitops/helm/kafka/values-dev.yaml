@@ -1,0 +1,4 @@
+image:
+  repository: apache/kafka
+  tag: "3.9.0"
+  pullPolicy: IfNotPresent

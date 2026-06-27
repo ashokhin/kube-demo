@@ -1,0 +1,44 @@
+---
+# Grafana dashboard ConfigMap + PrometheusRule alerts — raw manifests (not a Helm chart)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-manifests-dev
+  namespace: argocd
+spec:
+  project: hadoop-demo
+  source:
+    repoURL: "git@bitbucket.company.internal:devops/hadoop-demo-gitops.git"
+    targetRevision: HEAD
+    path: manifests/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+# External Secrets Operator ClusterSecretStore + ExternalSecrets (Vault → K8s Secrets)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault-secrets-dev
+  namespace: argocd
+spec:
+  project: hadoop-demo
+  source:
+    repoURL: "git@bitbucket.company.internal:devops/hadoop-demo-gitops.git"
+    targetRevision: HEAD
+    path: manifests/vault
+    directory:
+      exclude: "README.md"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hadoop-demo-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

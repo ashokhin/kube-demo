@@ -1,0 +1,25 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: risk-ui-dev
+  namespace: argocd
+spec:
+  project: hadoop-demo
+  source:
+    repoURL: "git@bitbucket.company.internal:devops/hadoop-demo-gitops.git"
+    targetRevision: HEAD
+    path: helm/risk-ui
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hadoop-demo-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

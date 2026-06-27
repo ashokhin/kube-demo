@@ -1,0 +1,26 @@
+# Example rendered output from helm/monitoring chart. Managed by ArgoCD via helm/argocd-apps.
+---
+# Helm values for Grafana Loki (log aggregation)
+# Single-binary mode — suitable for dev/staging.
+# For prod, switch to distributed mode (loki.deploymentMode: Distributed).
+#
+# Install:
+#   helm repo add grafana https://grafana.github.io/helm-charts
+#   helm upgrade --install loki grafana/loki \
+#     -n monitoring --create-namespace -f loki-values.yaml
+
+loki:
+  deploymentMode: SingleBinary
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  singleBinary:
+    replicas: 1
+    persistence:
+      enabled: true
+      size: 20Gi
+
+# Grafana datasource is auto-registered by kube-prometheus-stack
+# if loki is in the same namespace.

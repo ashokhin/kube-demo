@@ -1,0 +1,65 @@
+---
+# Target ArgoCD namespace
+argocdNamespace: argocd
+
+project:
+  name: hadoop-demo
+  description: "Hadoop/Spark demo stack — local K3s cluster"
+  # Cluster-scoped resources the project may manage
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+# Source repository for all applications
+source:
+  repoURL: https://github.com/ashokhin/kube-demo.git
+  targetRevision: hadoop
+  # Path prefix — each app appends its own chart directory
+  pathPrefix: 006_gitops/helm
+
+# Target cluster and namespace for all applications
+destination:
+  server: https://kubernetes.default.svc
+  namespace: hadoop-demo-dev
+
+# Sync policy applied to all applications
+syncPolicy:
+  automated:
+    prune: true
+    selfHeal: true
+  syncOptions:
+    - CreateNamespace=true
+    # Replace instead of patch for immutable resources (e.g. Job.spec.template)
+    - Replace=true
+
+# Applications — one entry per Helm chart
+# valuesFile: path relative to the chart directory
+apps:
+  - name: kafka
+    chart: kafka
+    valuesFile: values-dev.yaml
+
+  - name: monitoring
+    chart: monitoring
+    valuesFile: values-dev.yaml
+    namespace: monitoring
+
+  - name: risk-engine
+    chart: risk-engine
+    valuesFile: values-dev.yaml
+
+  - name: risk-ui
+    chart: risk-ui
+    valuesFile: values-dev.yaml
+
+  - name: stream-ingestor
+    chart: stream-ingestor
+    valuesFile: values-dev.yaml
+
+  - name: spark-calculator
+    chart: spark-calculator
+    valuesFile: values-dev.yaml
+
+  - name: oracle-reporter
+    chart: oracle-reporter
+    valuesFile: values-dev.yaml

@@ -1,0 +1,58 @@
+# Example rendered output from helm/monitoring chart. Managed by ArgoCD via helm/argocd-apps.
+---
+# Helm values for Grafana Alloy (log collector, OpenTelemetry-native)
+# Alloy replaces Promtail as the recommended Loki log agent.
+# Deployed as a DaemonSet — one pod per node.
+#
+# Install:
+#   helm upgrade --install alloy grafana/alloy \
+#     -n monitoring --create-namespace -f alloy-values.yaml
+
+alloy:
+  configMap:
+    content: |
+      // Alloy config (River language)
+      // Collects logs from all pods and ships to Loki with kubernetes labels.
+
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+
+        // Drop pods without a app.kubernetes.io/name label
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          action        = "keep"
+          regex         = ".+"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label  = "app"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+      }
+
+      loki.source.kubernetes "pods" {
+        targets    = discovery.relabel.pods.output
+        forward_to = [loki.write.default.receiver]
+      }
+
+      loki.write "default" {
+        endpoint {
+          url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }

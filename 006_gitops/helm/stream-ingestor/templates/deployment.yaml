@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "stream-ingestor.fullname" . }}
+  labels:
+    {{- include "stream-ingestor.labels" . | nindent 4 }}
+spec:
+  # Single replica: Spark driver runs in-pod; Kafka consumer group ensures
+  # partition rebalance if the pod restarts.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stream-ingestor
+  template:
+    metadata:
+      labels:
+        {{- include "stream-ingestor.labels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: {{ include "stream-ingestor.fullname" . }}
+
+      {{- if .Values.krb5.enabled }}
+      initContainers:
+        # krb5-init: obtain a fresh Kerberos TGT from keytab before Spark starts.
+        - name: krb5-init
+          image: {{ .Values.krb5Init.image }}
+          command:
+            - sh
+            - -c
+            - |
+              kinit -kt {{ .Values.config.KRB5_KEYTAB_PATH }} {{ .Values.krb5.principal }}
+          env:
+            - name: KRB5CCNAME
+              value: {{ .Values.config.KRB5CCNAME }}
+          volumeMounts:
+            - name: keytab
+              mountPath: /keytab
+              readOnly: true
+            - name: krb5-cache
+              mountPath: /tmp/krb5
+      {{- end }}
+
+      containers:
+        - name: stream-ingestor
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "stream-ingestor.fullname" . }}-config
+          volumeMounts:
+            {{- if .Values.hadoop.enabled }}
+            - name: hadoop-config
+              mountPath: /etc/hadoop/core-site.xml
+              subPath: core-site.xml
+            - name: hadoop-config
+              mountPath: /etc/hadoop/hdfs-site.xml
+              subPath: hdfs-site.xml
+            - name: hadoop-config
+              mountPath: /etc/hive/hive-site.xml
+              subPath: hive-site.xml
+            - name: hadoop-config
+              mountPath: /etc/krb5.conf
+              subPath: krb5.conf
+            {{- end }}
+            {{- if .Values.krb5.enabled }}
+            - name: keytab
+              mountPath: /keytab
+              readOnly: true
+            - name: krb5-cache
+              mountPath: /tmp/krb5
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: 9090
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+      volumes:
+        {{- if .Values.hadoop.enabled }}
+        - name: hadoop-config
+          configMap:
+            name: hadoop-config
+        {{- end }}
+        {{- if .Values.krb5.enabled }}
+        - name: keytab
+          secret:
+            secretName: stream-ingestor-keytab
+            defaultMode: 0400
+        - name: krb5-cache
+          emptyDir: {}
+        {{- end }}

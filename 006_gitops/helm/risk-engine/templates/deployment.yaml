@@ -1,0 +1,161 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "risk-engine.fullname" . }}
+  labels:
+    {{- include "risk-engine.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "risk-engine.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "risk-engine.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "risk-engine.fullname" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds | default 60 }}
+      containers:
+        # ---------------------------------------------------------------
+        # Main application container
+        # ---------------------------------------------------------------
+        - name: risk-engine
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "risk-engine.fullname" . }}
+          {{- if .Values.krb5.enabled }}
+          env:
+            - name: ORACLE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "risk-engine.fullname" . }}
+                  key: ORACLE_PASSWORD
+                  optional: true  # secret does not exist in dev — MOCK_MODE=true
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.hadoop.enabled }}
+            # Hadoop XML config files — mounted individually via subPath.
+            # Changing these files triggers pod rollout via checksum annotation.
+            - name: hadoop-config
+              mountPath: /etc/hadoop/core-site.xml
+              subPath: core-site.xml
+              readOnly: true
+            - name: hadoop-config
+              mountPath: /etc/hadoop/hdfs-site.xml
+              subPath: hdfs-site.xml
+              readOnly: true
+            - name: hadoop-config
+              mountPath: /etc/hive/conf/hive-site.xml
+              subPath: hive-site.xml
+              readOnly: true
+            - name: hadoop-config
+              mountPath: /etc/krb5.conf
+              subPath: krb5.conf
+              readOnly: true
+            {{- end }}
+            {{- if .Values.krb5.enabled }}
+            # Keytab — read-only, mode 0400 (owner only)
+            - name: keytab
+              mountPath: /keytab
+              readOnly: true
+            # KRB5 ticket cache — written by krb5-renewer sidecar, read here
+            - name: krb5-cache
+              mountPath: /tmp/krb5
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.service.targetPort }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: {{ .Values.service.targetPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+        {{- if .Values.krb5.enabled }}
+        # ---------------------------------------------------------------
+        # KRB5 renewer sidecar — keeps the Kerberos ticket alive.
+        #
+        # Why sidecar and not init container?
+        # This is a long-running Deployment. Ticket lifetime is ~10h, renewable
+        # up to 7 days. Without renewal the main container would lose Hadoop
+        # access after 10 hours without a pod restart.
+        #
+        # The sidecar runs `kinit -R` (renew) every 8 hours.
+        # If the ticket's renewable lifetime has expired, it falls back to a full
+        # `kinit` from the keytab so service is never interrupted.
+        # ---------------------------------------------------------------
+        - name: krb5-renewer
+          image: "{{ .Values.krb5Renewer.image }}"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              export KRB5CCNAME=/tmp/krb5/tgt
+              echo "==> Initial kinit from keytab"
+              kinit -kt /keytab/risk-engine.keytab {{ .Values.krb5.principal }}
+
+              echo "==> Starting renewal loop (interval: {{ .Values.krb5Renewer.renewIntervalSeconds }}s)"
+              while true; do
+                sleep {{ .Values.krb5Renewer.renewIntervalSeconds }}
+                echo "==> Renewing KRB5 ticket"
+                kinit -R 2>/dev/null || {
+                  echo "==> Renewal failed, re-initializing from keytab"
+                  kinit -kt /keytab/risk-engine.keytab {{ .Values.krb5.principal }}
+                }
+              done
+          volumeMounts:
+            - name: keytab
+              mountPath: /keytab
+              readOnly: true
+            - name: krb5-cache
+              mountPath: /tmp/krb5
+            - name: hadoop-config
+              mountPath: /etc/krb5.conf
+              subPath: krb5.conf
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+        {{- end }}
+
+      volumes:
+        {{- if .Values.hadoop.enabled }}
+        # Hadoop config from the shared cluster ConfigMap
+        - name: hadoop-config
+          configMap:
+            name: hadoop-config
+        {{- end }}
+        {{- if .Values.krb5.enabled }}
+        # Keytab from Secret — created by ops team, never committed to git
+        - name: keytab
+          secret:
+            secretName: {{ include "risk-engine.fullname" . }}-keytab
+            defaultMode: 0400
+        # Shared KRB5 ticket cache between main container and renewer sidecar
+        - name: krb5-cache
+          emptyDir: {}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

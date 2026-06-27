@@ -1,0 +1,61 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: risk-ui
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
+# Actuator: expose health and prometheus endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# OpenAPI / Swagger UI available at /swagger-ui.html
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+kafka:
+  topics:
+    risk-jobs: ${KAFKA_TOPIC_RISK_JOBS:risk-jobs}
+
+risk:
+  engine:
+    url: ${RISK_ENGINE_URL:http://risk-engine:8081}
+
+kubernetes:
+  enabled: ${KUBERNETES_ENABLED:true}
+  namespace: ${KUBERNETES_NAMESPACE:hadoop-demo-dev}
+
+spark:
+  calculator:
+    image: ${SPARK_CALCULATOR_IMAGE:nexus.company.internal/hadoop-demo/spark-calculator:latest}
+    mock-mode: ${SPARK_CALCULATOR_MOCK_MODE:true}
+
+---
+# Local profile: disables K8s integration, uses mock endpoints
+spring:
+  config:
+    activate:
+      on-profile: local
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+kubernetes:
+  enabled: false

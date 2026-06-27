@@ -1,0 +1,5 @@
+apiVersion: v2
+name: argocd-apps
+description: ArgoCD AppProject and Applications for the Hadoop/Spark demo stack
+type: application
+version: 0.1.0

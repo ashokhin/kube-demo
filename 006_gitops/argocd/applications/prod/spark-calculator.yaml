@@ -1,0 +1,23 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: spark-calculator-prod
+  namespace: argocd
+spec:
+  project: hadoop-demo
+  source:
+    repoURL: "git@bitbucket.company.internal:devops/hadoop-demo-gitops.git"
+    targetRevision: HEAD
+    path: helm/spark-calculator
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-spark-yarn.yaml   # prod uses external YARN cluster
+        - values-prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hadoop-demo-prod
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

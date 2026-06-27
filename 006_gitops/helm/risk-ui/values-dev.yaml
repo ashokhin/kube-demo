@@ -1,0 +1,29 @@
+---
+image:
+  repository: 192.168.122.76:30500/risk-ui
+  tag: "latest"
+  pullPolicy: Always
+
+replicaCount: 1
+
+riskEngineUrl: "http://risk-engine:80"
+sparkCalculatorImage: "192.168.122.76:30500/spark-calculator:latest"
+sparkCalculatorMockMode: "true"
+
+kubernetes:
+  enabled: "true"
+
+serviceMonitor:
+  enabled: false
+
+ingress:
+  enabled: true
+  host: risk-ui.company.internal
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

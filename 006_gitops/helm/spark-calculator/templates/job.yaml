@@ -1,0 +1,156 @@
+{{- /*
+This Job is a TEMPLATE — risk-ui creates actual Job instances via the Kubernetes API,
+injecting MODEL_VERSION, PORTFOLIO_ID, and SCENARIO as environment variables.
+
+This chart defines the "base" Job spec that risk-ui uses as a template:
+  - Image version (updated by CI/CD via Promote stage)
+  - Resource limits
+  - Volume mounts (keytab, hadoop-config, krb5-cache)
+  - Init container (krb5-init)
+  - SPARK_MODE (submit / operator / yarn)
+
+risk-ui overrides: MODEL_VERSION, PORTFOLIO_ID, SCENARIO, and Job name (must be unique).
+*/ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "spark-calculator.fullname" . }}
+  labels:
+    {{- include "spark-calculator.labels" . | nindent 4 }}
+spec:
+  # Automatically delete completed/failed Jobs after 1 hour.
+  # Prevents accumulation of stale Job objects in the namespace.
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: {{ .Values.backoffLimit }}
+  # manualSelector + explicit selector make spec.selector deterministic so that
+  # ArgoCD Replace=true can patch the Job without hitting "field is immutable".
+  manualSelector: true
+  selector:
+    matchLabels:
+      {{- include "spark-calculator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "spark-calculator.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "spark-calculator.fullname" . }}
+
+      {{- if .Values.krb5.enabled }}
+      # -----------------------------------------------------------------------
+      # Init container: obtain KRB5 ticket before the main container starts.
+      #
+      # Pattern: init container KRB5
+      #   - Runs once: kinit -kt /keytab/... <principal>
+      #   - Writes TGT to /tmp/krb5/tgt (emptyDir shared with main container)
+      #   - Exits 0 on success, non-zero on failure (pod will not start if failed)
+      #
+      # Why init container here (not sidecar)?
+      #   This is a short-lived Job (minutes, not hours).
+      #   Ticket lifetime (~10h) far exceeds job duration — no renewal needed.
+      # -----------------------------------------------------------------------
+      initContainers:
+        - name: krb5-init
+          image: "{{ .Values.krb5Init.image }}"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              export KRB5CCNAME=/tmp/krb5/tgt
+              echo "==> Obtaining KRB5 ticket"
+              kinit -kt /keytab/spark-calculator.keytab {{ .Values.krb5.principal }}
+              klist
+              echo "==> KRB5 init complete"
+          volumeMounts:
+            - name: keytab
+              mountPath: /keytab
+              readOnly: true
+            - name: krb5-cache
+              mountPath: /tmp/krb5
+            - name: hadoop-config
+              mountPath: /etc/krb5.conf
+              subPath: krb5.conf
+              readOnly: true
+      {{- end }}
+
+      containers:
+        - name: spark-calculator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- range $k, $v := .Values.config }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            - name: ORACLE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "spark-calculator.fullname" . }}
+                  key: ORACLE_PASSWORD
+                  optional: true
+            {{- if .Values.krb5.enabled }}
+            # KRB5CCNAME points to the ticket written by the init container
+            - name: KRB5CCNAME
+              value: /tmp/krb5/tgt
+            {{- end }}
+
+            {{- if eq .Values.sparkMode "operator" }}
+            # Spark Operator mode: driver needs to know the K8s master URL
+            - name: SPARK_KUBERNETES_MASTER
+              value: "k8s://https://kubernetes.default.svc"
+            - name: KUBERNETES_NAMESPACE
+              value: {{ .Release.Namespace }}
+            {{- end }}
+
+          volumeMounts:
+            {{- if .Values.hadoop.enabled }}
+            - name: hadoop-config
+              mountPath: /etc/hadoop/core-site.xml
+              subPath: core-site.xml
+              readOnly: true
+            - name: hadoop-config
+              mountPath: /etc/hadoop/hdfs-site.xml
+              subPath: hdfs-site.xml
+              readOnly: true
+            - name: hadoop-config
+              mountPath: /etc/hive/conf/hive-site.xml
+              subPath: hive-site.xml
+              readOnly: true
+            - name: hadoop-config
+              mountPath: /etc/krb5.conf
+              subPath: krb5.conf
+              readOnly: true
+            {{- if eq .Values.sparkMode "yarn" }}
+            # YARN mode: mount YARN-specific config (yarn-site.xml)
+            - name: hadoop-config
+              mountPath: /etc/hadoop/yarn-site.xml
+              subPath: yarn-site.xml
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if .Values.krb5.enabled }}
+            - name: keytab
+              mountPath: /keytab
+              readOnly: true
+            - name: krb5-cache
+              mountPath: /tmp/krb5
+            {{- end }}
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+      volumes:
+        {{- if .Values.hadoop.enabled }}
+        - name: hadoop-config
+          configMap:
+            name: hadoop-config
+        {{- end }}
+        {{- if .Values.krb5.enabled }}
+        - name: keytab
+          secret:
+            secretName: {{ include "spark-calculator.fullname" . }}-keytab
+            defaultMode: 0400
+        # Shared between init container and main container
+        - name: krb5-cache
+          emptyDir: {}
+        {{- end }}

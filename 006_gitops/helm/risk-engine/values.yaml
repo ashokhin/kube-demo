@@ -1,0 +1,69 @@
+---
+image:
+  repository: nexus.company.internal/hadoop-demo/risk-engine
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+terminationGracePeriodSeconds: 60
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8081
+
+config:
+  LOG_LEVEL: "INFO"
+  PORT: "8081"
+  MOCK_MODE: "false"
+  HDFS_URL: "hdfs://namenode.hadoop.internal:8020"
+  HDFS_INPUT_PATH: "/data/risk/input"
+  HDFS_OUTPUT_PATH: "/data/risk/output"
+  HIVE_HOST: "hive-server.hadoop.internal"
+  HIVE_PORT: "10000"
+  HIVE_DATABASE: "risk"
+  KRB5_KEYTAB_PATH: "/keytab/risk-engine.keytab"
+  KRB5_PRINCIPAL: "risk-engine@EXAMPLE.COM"
+  KRB5CCNAME: "/tmp/krb5/tgt"
+
+# Kerberos configuration
+krb5:
+  enabled: true
+  principal: "risk-engine@EXAMPLE.COM"
+
+# Hadoop/Hive config volume mounts
+hadoop:
+  enabled: true
+
+# KRB5 renewer sidecar — keeps ticket alive for long-running Deployment
+krb5Renewer:
+  # Use a minimal image that has kinit (krb5-user package)
+  image: debian:bookworm-slim
+  # Renew every 8 hours (ticket lifetime is 10h, renewable up to 7 days)
+  renewIntervalSeconds: 28800
+
+# Hive connection for migration job
+hive:
+  jdbcUrl: "jdbc:hive2://hive-server.hadoop.internal:10000/;principal=hive/_HOST@EXAMPLE.COM"
+
+# Hive migration job configuration
+migrate:
+  enabled: true
+  image:
+    repository: nexus.company.internal/hadoop-demo/risk-engine-migrate
+    tag: "0.1.0"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+serviceMonitor:
+  enabled: true
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

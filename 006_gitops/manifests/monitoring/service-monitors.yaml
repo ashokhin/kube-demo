@@ -1,0 +1,56 @@
+# Example rendered output from helm/monitoring chart. Managed by ArgoCD via helm/argocd-apps.
+# ServiceMonitor resources for all hadoop-demo services.
+# Prometheus (kube-prometheus-stack) scrapes /metrics on the port named "metrics".
+#
+# Apply to each namespace:
+#   kubectl apply -f service-monitors.yaml -n hadoop-demo-dev
+#   kubectl apply -f service-monitors.yaml -n hadoop-demo-staging
+#   kubectl apply -f service-monitors.yaml -n hadoop-demo-prod
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: risk-ui
+  labels:
+    app.kubernetes.io/part-of: hadoop-demo
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: risk-ui
+  endpoints:
+    - port: metrics
+      path: /actuator/prometheus
+      interval: 30s
+      scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: risk-engine
+  labels:
+    app.kubernetes.io/part-of: hadoop-demo
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: risk-engine
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: stream-ingestor
+  labels:
+    app.kubernetes.io/part-of: hadoop-demo
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stream-ingestor
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

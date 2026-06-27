@@ -1,0 +1,22 @@
+---
+# Spark mode: Spark Operator (SparkApplication CRD)
+# The Operator manages driver + executor pods dynamically.
+# The Job pod acts as the submit client and exits after submission.
+# Best for: production on Kubernetes, large datasets, dynamic scaling.
+#
+# Prerequisites: Spark Operator must be installed in the cluster.
+#   helm install spark-operator spark-operator/spark-operator \
+#     --namespace spark-operator --create-namespace
+sparkMode: operator
+config:
+  SPARK_MODE: "operator"
+  # Executor image must match the driver image for binary compatibility
+  SPARK_EXECUTOR_IMAGE: "nexus.company.internal/hadoop-demo/spark-calculator:0.1.0"
+resources:
+  # Submit client pod — small, just sends the SparkApplication spec
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

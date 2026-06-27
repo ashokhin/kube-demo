@@ -1,0 +1,22 @@
+---
+# Spark mode: external YARN cluster
+# The Kubernetes Job pod submits the job to an existing Hadoop YARN cluster.
+# Executors run on YARN NodeManagers — NOT in Kubernetes.
+# Best for: migration path when you have an existing YARN cluster.
+#
+# Prerequisites:
+#   - YARN ResourceManager reachable from the Kubernetes cluster network
+#   - yarn-site.xml added to the hadoop-config ConfigMap
+#   - HADOOP_CONF_DIR must point to a directory with yarn-site.xml
+sparkMode: yarn
+config:
+  SPARK_MODE: "yarn"
+  HADOOP_CONF_DIR: "/etc/hadoop"
+resources:
+  # Submit client pod — small, actual processing runs on YARN
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi

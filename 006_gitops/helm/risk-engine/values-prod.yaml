@@ -1,0 +1,13 @@
+---
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+krb5Renewer:
+  renewIntervalSeconds: 14400  # renew every 4 hours in prod for extra safety

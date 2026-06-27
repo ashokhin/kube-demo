@@ -1,0 +1,119 @@
+# Example rendered output from helm/monitoring chart. Managed by ArgoCD via helm/argocd-apps.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  hadoop-demo-overview.json: |
+    {
+      "title": "Hadoop Demo — Overview",
+      "uid": "hadoop-demo-overview",
+      "tags": ["hadoop-demo"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "panels": [
+        {
+          "id": 1,
+          "title": "Risk Calculations / sec",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(risk_engine_calculations_total{status='success'}[5m])) by (model_version)",
+              "legendFormat": "{{model_version}}"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Calculation Duration p99 (sec)",
+          "type": "timeseries",
+          "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(risk_engine_calculation_duration_seconds_bucket[5m])) by (le, model_version))",
+              "legendFormat": "p99 {{model_version}}"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Kafka Consumer Lag (risk-engine)",
+          "type": "stat",
+          "gridPos": {"x": 0, "y": 8, "w": 6, "h": 4},
+          "targets": [
+            {"expr": "risk_engine_kafka_consumer_lag", "legendFormat": "lag"}
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Active Calculations",
+          "type": "stat",
+          "gridPos": {"x": 6, "y": 8, "w": 6, "h": 4},
+          "targets": [
+            {"expr": "risk_engine_active_calculations", "legendFormat": "active"}
+          ]
+        },
+        {
+          "id": 5,
+          "title": "Kafka Jobs Published (risk-ui)",
+          "type": "stat",
+          "gridPos": {"x": 12, "y": 8, "w": 6, "h": 4},
+          "targets": [
+            {"expr": "increase(riskui_kafka_jobs_total[1h])", "legendFormat": "last 1h"}
+          ]
+        },
+        {
+          "id": 6,
+          "title": "Stream-Ingestor Records / sec",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "rate(stream_ingestor_records_processed_total[5m])",
+              "legendFormat": "records/sec"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Stream-Ingestor Batch Duration p99",
+          "type": "timeseries",
+          "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, rate(stream_ingestor_batch_duration_seconds_bucket[5m]))",
+              "legendFormat": "p99"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "title": "Calculation Error Rate",
+          "type": "timeseries",
+          "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "rate(risk_engine_calculation_errors_total[5m])",
+              "legendFormat": "errors/sec {{model_version}}"
+            }
+          ]
+        },
+        {
+          "id": 9,
+          "title": "Batch Failures (stream-ingestor)",
+          "type": "timeseries",
+          "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "rate(stream_ingestor_batch_failures_total[5m])",
+              "legendFormat": "failures/sec"
+            }
+          ]
+        }
+      ]
+    }

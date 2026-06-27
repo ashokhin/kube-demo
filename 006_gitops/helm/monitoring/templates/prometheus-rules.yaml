@@ -1,0 +1,93 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: hadoop-demo-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/part-of: hadoop-demo
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: risk-engine
+      interval: 60s
+      rules:
+        - alert: RiskEngineNoCalculations
+          expr: |
+            rate(risk_engine_calculations_total{status="success"}[10m]) == 0
+          for: 10m
+          labels:
+            severity: warning
+            service: risk-engine
+          annotations:
+            summary: "risk-engine: no successful calculations for 10 min"
+            description: "Namespace {{ "{{" }} $labels.namespace {{ "}}" }} — risk-engine has not completed any calculation in 10 minutes."
+
+        - alert: RiskEngineHighErrorRate
+          expr: |
+            rate(risk_engine_calculation_errors_total[5m])
+            /
+            (rate(risk_engine_calculations_total[5m]) + 0.001)
+            > 0.05
+          for: 5m
+          labels:
+            severity: critical
+            service: risk-engine
+          annotations:
+            summary: "risk-engine: calculation error rate > 5%"
+            description: "Error rate is {{ "{{" }} $value | humanizePercentage {{ "}}" }} in namespace {{ "{{" }} $labels.namespace {{ "}}" }}."
+
+        - alert: RiskEngineKafkaLagHigh
+          expr: risk_engine_kafka_consumer_lag > 100
+          for: 5m
+          labels:
+            severity: warning
+            service: risk-engine
+          annotations:
+            summary: "risk-engine: Kafka consumer lag > 100"
+            description: "Consumer is {{ "{{" }} $value {{ "}}" }} messages behind in namespace {{ "{{" }} $labels.namespace {{ "}}" }}."
+
+        - alert: RiskEngineTooManyActiveCalculations
+          expr: risk_engine_active_calculations > 10
+          for: 2m
+          labels:
+            severity: warning
+            service: risk-engine
+          annotations:
+            summary: "risk-engine: more than 10 concurrent calculations"
+
+    - name: stream-ingestor
+      interval: 60s
+      rules:
+        - alert: StreamIngestorStaleBatch
+          expr: |
+            time() - stream_ingestor_last_batch_timestamp_seconds > 300
+          for: 5m
+          labels:
+            severity: warning
+            service: stream-ingestor
+          annotations:
+            summary: "stream-ingestor: no micro-batch for 5 min"
+            description: "Last batch was {{ "{{" }} $value | humanizeDuration {{ "}}" }} ago in namespace {{ "{{" }} $labels.namespace {{ "}}" }}."
+
+        - alert: StreamIngestorBatchFailures
+          expr: rate(stream_ingestor_batch_failures_total[10m]) > 0
+          for: 2m
+          labels:
+            severity: critical
+            service: stream-ingestor
+          annotations:
+            summary: "stream-ingestor: micro-batch failures detected"
+
+    - name: risk-ui
+      interval: 60s
+      rules:
+        - alert: RiskUIKafkaPublishFailures
+          expr: rate(riskui_kafka_publish_failed_total[5m]) > 0
+          for: 2m
+          labels:
+            severity: warning
+            service: risk-ui
+          annotations:
+            summary: "risk-ui: Kafka publish failures"
+            description: "risk-ui is failing to publish job requests to Kafka in namespace {{ "{{" }} $labels.namespace {{ "}}" }}."

@@ -1,0 +1,63 @@
+# Build backend: poetry-core
+#
+# poetry is the most feature-rich Python build tool in 2024-2026:
+# - Lockfile (poetry.lock) ensures reproducible builds across environments
+# - Dependency groups (dev, test) keep production image lean
+# - Virtual env management built-in
+#
+# Migration note: if your legacy project uses setup.py + requirements.txt,
+# `poetry init` can import existing dependencies interactively.
+# If you use pipenv, `poetry import` reads Pipfile directly.
+[build-system]
+requires = ["poetry-core>=1.9"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "risk-engine"
+version = "0.1.0"
+description = "Risk calculation engine with HDFS/Hive integration and KRB5 auth"
+authors = ["Platform Team <platform@company.internal>"]
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = ">=0.115.0"
+uvicorn = {extras = ["standard"], version = ">=0.32.0"}
+pydantic-settings = ">=2.6.0"
+prometheus-client = ">=0.21.0"
+# Kafka consumer: reads job requests published by risk-ui
+confluent-kafka = ">=2.6.0"
+
+# Hadoop/Hive/SASL deps are optional — they require C extensions that only
+# build on clusters with libsasl2-dev + libkrb5-dev + g++.
+# Install with: poetry install --extras hadoop
+# In MOCK_MODE=true these packages are never imported.
+[tool.poetry.group.hadoop]
+optional = true
+
+[tool.poetry.group.hadoop.dependencies]
+# HDFS client: hdfs3 wraps libhdfs3 C++ library (recommended for Kerberos clusters).
+hdfs3 = ">=0.3.1"
+# PyHive: Python DB-API 2.0 interface for Hive via Thrift.
+# sasl is required for GSSAPI (Kerberos) authentication.
+PyHive = {extras = ["hive"], version = ">=0.7.0"}
+sasl = ">=0.3.1"
+thrift = ">=0.16.0"
+thrift-sasl = ">=0.4.3"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0.0"
+pytest-asyncio = ">=0.24.0"
+ruff = ">=0.8.0"
+mypy = ">=1.13.0"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true

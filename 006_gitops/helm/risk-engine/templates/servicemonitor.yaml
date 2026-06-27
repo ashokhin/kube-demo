@@ -1,0 +1,18 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-risk-engine
+  labels:
+    app.kubernetes.io/name: risk-engine
+    app.kubernetes.io/part-of: hadoop-demo
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: risk-engine
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+{{- end }}

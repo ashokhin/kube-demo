@@ -1,0 +1,16 @@
+---
+# Spark mode: in-pod spark-submit (local[*])
+# All Spark processing runs inside the single Job pod.
+# No driver/executor split, no external Spark cluster needed.
+# Best for: development, small datasets, simple jobs.
+sparkMode: submit
+config:
+  SPARK_MODE: "submit"
+  LOG_LEVEL: "DEBUG"
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+  limits:
+    cpu: 2000m
+    memory: 4Gi

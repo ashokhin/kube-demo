@@ -1,0 +1,33 @@
+# Local environment files — never commit real credentials
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+*.egg-info/
+
+# Java / Maven
+target/
+*.class
+*.jar
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+
+# Keytab files — contain Kerberos credentials, must never be committed
+*.keytab
+*.ccache
+# Helm — downloaded chart archives (reproduced via helm dependency build / Chart.lock)
+**/charts/*.tgz
+
+# Claude
+CLAUDE.md

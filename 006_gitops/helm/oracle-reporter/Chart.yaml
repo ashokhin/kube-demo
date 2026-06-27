@@ -1,0 +1,7 @@
+---
+apiVersion: v2
+name: oracle-reporter
+description: Scheduled report generator — reads Oracle, writes HTML to HDFS
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

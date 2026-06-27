@@ -1,0 +1,101 @@
+// spark-calculator CI pipeline
+// Checkout → Lint → Test → Build → Scan → Push → Promote
+
+pipeline {
+    agent any
+
+    environment {
+        SERVICE     = "spark-calculator"
+        REGISTRY    = "nexus.company.internal"
+        PROJECT     = "hadoop-demo"
+        IMAGE       = "${REGISTRY}/${PROJECT}/${SERVICE}"
+        TAG         = "${GIT_BRANCH}-${GIT_COMMIT[0..6]}"
+        GITOPS_REPO = "git@bitbucket.company.internal:devops/hadoop-demo-gitops.git"
+    }
+
+    stages {
+
+        stage("Checkout") { steps { checkout scm } }
+
+        stage("Lint") {
+            steps {
+                dir("003_spark-calculator") {
+                    sh '''
+                        docker run --rm -v "$(pwd):/src" -w /src \
+                            ghcr.io/astral-sh/ruff:latest check src/
+                        docker run --rm -v "$(pwd)/Dockerfile:/Dockerfile" \
+                            hadolint/hadolint:latest hadolint /Dockerfile
+                    '''
+                }
+            }
+        }
+
+        stage("Test") {
+            steps {
+                dir("003_spark-calculator") {
+                    sh """
+                        docker build --target builder --tag ${IMAGE}:test-${TAG} .
+                        docker run --rm --env MOCK_MODE=true ${IMAGE}:test-${TAG} \
+                            sh -c "pip install pytest && pytest tests/ -v --tb=short"
+                        docker rmi ${IMAGE}:test-${TAG} || true
+                    """
+                }
+            }
+        }
+
+        stage("Build") {
+            steps {
+                dir("003_spark-calculator") {
+                    sh "docker build --tag ${IMAGE}:${TAG} ."
+                }
+            }
+        }
+
+        stage("Scan") {
+            steps {
+                sh """
+                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+                        aquasec/trivy:latest image --exit-code 1 \
+                        --severity HIGH,CRITICAL --ignore-unfixed ${IMAGE}:${TAG}
+                """
+            }
+        }
+
+        stage("Push") {
+            when { branch "main" }
+            steps {
+                withCredentials([usernamePassword(credentialsId: "nexus-credentials",
+                        usernameVariable: "NEXUS_USER", passwordVariable: "NEXUS_PASS")]) {
+                    sh "docker login ${REGISTRY} -u ${NEXUS_USER} -p ${NEXUS_PASS}"
+                    sh "docker push ${IMAGE}:${TAG}"
+                }
+            }
+        }
+
+        stage("Promote") {
+            when { branch "main" }
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: "gitops-ssh-key",
+                        keyFileVariable: "SSH_KEY")]) {
+                    sh """
+                        helm lint 006_gitops/helm/${SERVICE}/
+                        git clone ${GITOPS_REPO} gitops-repo
+                        cd gitops-repo
+                        yq e '.image.tag = "${TAG}"' -i helm/${SERVICE}/values-dev.yaml
+                        git config user.email "jenkins@company.internal"
+                        git config user.name "Jenkins CI"
+                        git commit -am "ci(${SERVICE}): promote ${TAG} to dev"
+                        git push
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh "docker rmi ${IMAGE}:${TAG} || true"
+            cleanWs()
+        }
+    }
+}

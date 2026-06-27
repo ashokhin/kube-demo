@@ -1,0 +1,24 @@
+---
+image:
+  repository: 192.168.122.76:30500/spark-calculator
+  tag: "latest"
+  pullPolicy: Always
+
+config:
+  LOG_LEVEL: "DEBUG"
+  MOCK_MODE: "true"
+  SPARK_MODE: "submit"
+
+krb5:
+  enabled: false
+
+hadoop:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi

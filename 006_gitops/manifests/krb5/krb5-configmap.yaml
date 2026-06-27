@@ -1,0 +1,31 @@
+---
+# Kerberos client configuration — mounted at /etc/krb5.conf in all pods
+# that need HDFS/Hive/Kafka SASL-GSSAPI access.
+#
+# Replace EXAMPLE.COM and kdc.example.com with your actual realm and KDC.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krb5-config
+  labels:
+    app.kubernetes.io/part-of: hadoop-demo
+data:
+  krb5.conf: |
+    [libdefaults]
+      default_realm = EXAMPLE.COM
+      dns_lookup_realm = false
+      dns_lookup_kdc = false
+      ticket_lifetime = 10h
+      renew_lifetime = 7d
+      forwardable = true
+      rdns = false
+
+    [realms]
+      EXAMPLE.COM = {
+        kdc = kdc.example.com
+        admin_server = kdc.example.com
+      }
+
+    [domain_realm]
+      .example.com = EXAMPLE.COM
+      example.com = EXAMPLE.COM

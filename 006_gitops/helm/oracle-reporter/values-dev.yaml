@@ -1,0 +1,29 @@
+---
+image:
+  repository: 192.168.122.76:30500/oracle-reporter
+  tag: "latest"
+  pullPolicy: Always
+
+schedule: "0 6 * * *"
+
+config:
+  LOG_LEVEL: "DEBUG"
+  MOCK_MODE: "true"
+  REPORT_LOOKBACK_DAYS: "7"
+
+krb5:
+  enabled: false
+
+hadoop:
+  enabled: false
+
+migrate:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi

@@ -1,0 +1,32 @@
+# Build backend: plain requirements.txt
+#
+# requirements.txt is the simplest Python dependency format.
+# No build system, no lockfile, no virtual env management.
+# Still widely used for:
+#   - Simple scripts and one-off tools
+#   - Teams unfamiliar with pyproject.toml tooling
+#   - Projects where the CI environment already pins all deps
+#
+# Limitation: no dependency groups (dev vs prod).
+# Workaround: separate requirements-dev.txt for test/lint dependencies.
+#
+# Migration path: `pip install pip-tools`, then `pip-compile requirements.in`
+# generates a fully pinned requirements.txt from a loose requirements.in file.
+
+# HTTP and async
+# (no HTTP server — this is a CronJob, no incoming requests)
+
+# Oracle DB driver — thin mode, no Oracle Instant Client needed
+oracledb>=2.0.0
+
+# Configuration
+pydantic-settings>=2.6.0
+
+# Report rendering
+jinja2>=3.1.0
+
+# Oracle migrations
+alembic>=1.13.0
+
+# Prometheus metrics (even for batch jobs — tracks execution duration and errors)
+prometheus-client>=0.21.0

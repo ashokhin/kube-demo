@@ -1,0 +1,76 @@
+---
+# kube-prometheus-stack
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-staging
+  namespace: argocd
+spec:
+  project: hadoop-demo
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: "61.7.2"
+    helm:
+      valueFiles:
+        - "$gitops/manifests/monitoring/kube-prometheus-values.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+# Loki
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki-staging
+  namespace: argocd
+spec:
+  project: hadoop-demo
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: "6.18.0"
+    helm:
+      valueFiles:
+        - "$gitops/manifests/monitoring/loki-values.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true
+---
+# Alloy (log collector / agent)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy-staging
+  namespace: argocd
+spec:
+  project: hadoop-demo
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: alloy
+    targetRevision: "0.9.1"
+    helm:
+      valueFiles:
+        - "$gitops/manifests/monitoring/alloy-values.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true

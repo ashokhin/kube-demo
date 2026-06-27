@@ -1,0 +1,104 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "oracle-reporter.fullname" . }}
+  labels:
+    {{- include "oracle-reporter.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  # Keep last 3 successful and 1 failed job pods for log inspection
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: Forbid  # do not start a new run if previous is still running
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            {{- include "oracle-reporter.selectorLabels" . | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "oracle-reporter.fullname" . }}
+
+          {{- if .Values.krb5.enabled }}
+          # ---------------------------------------------------------------
+          # Init container: obtain KRB5 ticket.
+          # Same pattern as spark-calculator — short-lived job, no renewal needed.
+          # ---------------------------------------------------------------
+          initContainers:
+            - name: krb5-init
+              image: "{{ .Values.krb5Init.image }}"
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  export KRB5CCNAME=/tmp/krb5/tgt
+                  echo "==> Obtaining KRB5 ticket for oracle-reporter"
+                  kinit -kt /keytab/oracle-reporter.keytab {{ .Values.krb5.principal }}
+                  echo "==> Ticket obtained"
+              volumeMounts:
+                - name: keytab
+                  mountPath: /keytab
+                  readOnly: true
+                - name: krb5-cache
+                  mountPath: /tmp/krb5
+                - name: hadoop-config
+                  mountPath: /etc/krb5.conf
+                  subPath: krb5.conf
+                  readOnly: true
+          {{- end }}
+
+          containers:
+            - name: oracle-reporter
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "oracle-reporter.fullname" . }}
+              env:
+                - name: ORACLE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "oracle-reporter.fullname" . }}
+                      key: ORACLE_PASSWORD
+                      optional: true
+                {{- if .Values.krb5.enabled }}
+                - name: KRB5CCNAME
+                  value: /tmp/krb5/tgt
+                {{- end }}
+              volumeMounts:
+                {{- if .Values.hadoop.enabled }}
+                - name: hadoop-config
+                  mountPath: /etc/hadoop/core-site.xml
+                  subPath: core-site.xml
+                  readOnly: true
+                - name: hadoop-config
+                  mountPath: /etc/krb5.conf
+                  subPath: krb5.conf
+                  readOnly: true
+                {{- end }}
+                {{- if .Values.krb5.enabled }}
+                - name: keytab
+                  mountPath: /keytab
+                  readOnly: true
+                - name: krb5-cache
+                  mountPath: /tmp/krb5
+                {{- end }}
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+
+          volumes:
+            {{- if .Values.hadoop.enabled }}
+            - name: hadoop-config
+              configMap:
+                name: hadoop-config
+            {{- end }}
+            {{- if .Values.krb5.enabled }}
+            - name: keytab
+              secret:
+                secretName: {{ include "oracle-reporter.fullname" . }}-keytab
+                defaultMode: 0400
+            - name: krb5-cache
+              emptyDir: {}
+            {{- end }}

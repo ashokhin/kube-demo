@@ -1,0 +1,31 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+  namespace: {{ .Release.Namespace }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ .Values.ingress.grafanaHost }}`)
+      kind: Rule
+      services:
+        - name: {{ .Release.Name }}-grafana
+          port: 80
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: prometheus
+  namespace: {{ .Release.Namespace }}
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`{{ .Values.ingress.prometheusHost }}`)
+      kind: Rule
+      services:
+        - name: {{ .Release.Name }}-kube-prometheus-prometheus
+          port: 9090
+{{- end }}

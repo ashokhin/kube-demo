@@ -1,0 +1,4 @@
+# Hadoop/HDFS client — requires libhdfs3 C++ library at build and runtime.
+# Install with: pip install -r requirements-hadoop.txt
+# Needs: apt-get install libkrb5-dev gcc g++
+hdfs3>=0.3.1

@@ -1,0 +1,29 @@
+image:
+  repository: apache/kafka
+  tag: "3.9.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+# KRaft cluster ID — must be stable across restarts (generated once via kafka-storage.sh random-uuid)
+clusterId: "MkU3OEVBNTcwNTJENDM2Qk"
+
+# Kafka listener configuration
+listeners:
+  client: "PLAINTEXT://:9092"
+  controller: "CONTROLLER://:9093"
+
+service:
+  port: 9092
+
+# emptyDir for dev — data is lost on pod restart (acceptable for demo)
+persistence:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi

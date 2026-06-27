@@ -1,0 +1,44 @@
+---
+image:
+  repository: nexus.company.internal/hadoop-demo/oracle-reporter
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# Cron schedule: daily at 02:00 UTC
+schedule: "0 2 * * *"
+
+config:
+  LOG_LEVEL: "INFO"
+  MOCK_MODE: "false"
+  ORACLE_DSN: "oracle.internal:1521/ORCLPDB1"
+  ORACLE_USER: "reporter_user"
+  ORACLE_SOURCE_TABLE: "spark_risk_results"
+  HDFS_URL: "hdfs://namenode.hadoop.internal:8020"
+  HDFS_OUTPUT_PATH: "/data/reports"
+  KRB5_KEYTAB_PATH: "/keytab/oracle-reporter.keytab"
+  KRB5_PRINCIPAL: "oracle-reporter@EXAMPLE.COM"
+  KRB5CCNAME: "/tmp/krb5/tgt"
+  REPORT_LOOKBACK_DAYS: "30"
+
+krb5Init:
+  image: debian:bookworm-slim
+
+krb5:
+  principal: "oracle-reporter@EXAMPLE.COM"
+
+migrate:
+  enabled: true
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+krb5:
+  enabled: true
+
+hadoop:
+  enabled: true

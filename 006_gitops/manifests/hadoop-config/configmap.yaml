@@ -1,0 +1,101 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hadoop-config
+  namespace: hadoop-demo-dev
+  labels:
+    app.kubernetes.io/component: hadoop-config
+data:
+  # Hadoop XML config files mounted as files into each pod via subPath.
+  # Updating this ConfigMap triggers pod rollout via the checksum annotation.
+  # No image rebuild required — only `kubectl apply` or `helm upgrade`.
+
+  core-site.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+    <configuration>
+      <!-- NameNode address — update when cluster changes -->
+      <property>
+        <name>fs.defaultFS</name>
+        <value>hdfs://namenode.hadoop.internal:8020</value>
+      </property>
+      <!-- Enable Kerberos authentication for all Hadoop services -->
+      <property>
+        <name>hadoop.security.authentication</name>
+        <value>kerberos</value>
+      </property>
+      <property>
+        <name>hadoop.security.authorization</name>
+        <value>true</value>
+      </property>
+      <!-- Kerberos realm — must match the cluster's KDC configuration -->
+      <property>
+        <name>hadoop.security.auth_to_local</name>
+        <value>RULE:[2:$1@$0](.*@EXAMPLE\.COM)s/@.*//
+                DEFAULT</value>
+      </property>
+    </configuration>
+
+  hdfs-site.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <configuration>
+      <property>
+        <name>dfs.namenode.kerberos.principal</name>
+        <value>hdfs/_HOST@EXAMPLE.COM</value>
+      </property>
+      <property>
+        <name>dfs.datanode.kerberos.principal</name>
+        <value>hdfs/_HOST@EXAMPLE.COM</value>
+      </property>
+      <!-- Replication factor: 3 for production, 1 for dev cluster -->
+      <property>
+        <name>dfs.replication</name>
+        <value>3</value>
+      </property>
+    </configuration>
+
+  hive-site.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <configuration>
+      <property>
+        <name>hive.server2.authentication</name>
+        <value>GSSAPI</value>
+      </property>
+      <property>
+        <name>hive.server2.authentication.kerberos.principal</name>
+        <value>hive/_HOST@EXAMPLE.COM</value>
+      </property>
+      <property>
+        <name>hive.server2.thrift.port</name>
+        <value>10000</value>
+      </property>
+      <!-- Allow dynamic partition inserts (required for risk_results table) -->
+      <property>
+        <name>hive.exec.dynamic.partition</name>
+        <value>true</value>
+      </property>
+      <property>
+        <name>hive.exec.dynamic.partition.mode</name>
+        <value>nonstrict</value>
+      </property>
+    </configuration>
+
+  krb5.conf: |
+    [libdefaults]
+      default_realm = EXAMPLE.COM
+      dns_lookup_realm = false
+      dns_lookup_kdc = true
+      ticket_lifetime = 10h
+      renewable_lifetime = 7d
+      forwardable = true
+
+    [realms]
+      EXAMPLE.COM = {
+        kdc = kdc.example.com
+        admin_server = kdc.example.com
+      }
+
+    [domain_realm]
+      .example.com = EXAMPLE.COM
+      example.com = EXAMPLE.COM

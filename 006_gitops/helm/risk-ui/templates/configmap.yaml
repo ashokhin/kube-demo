@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "risk-ui.fullname" . }}
+  labels:
+    {{- include "risk-ui.labels" . | nindent 4 }}
+data:
+  RISK_ENGINE_URL: {{ .Values.riskEngineUrl | quote }}
+  KUBERNETES_ENABLED: {{ .Values.kubernetes.enabled | quote }}
+  KUBERNETES_NAMESPACE: {{ .Release.Namespace | quote }}
+  SPARK_CALCULATOR_IMAGE: {{ .Values.sparkCalculatorImage | quote }}
+  SPARK_CALCULATOR_MOCK_MODE: {{ .Values.sparkCalculatorMockMode | quote }}
+  PORT: {{ .Values.service.targetPort | quote }}

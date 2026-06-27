@@ -1,0 +1,71 @@
+{{- if .Values.migrate.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "risk-engine.fullname" . }}-hive-migrate
+  labels:
+    {{- include "risk-engine.labels" . | nindent 4 }}
+  annotations:
+    # PreSync: run before ArgoCD applies the main Deployment.
+    # This ensures Hive schema is up to date before the app starts.
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        # Get a Kerberos ticket before connecting to Hive.
+        # The ticket is written to the shared emptyDir volume.
+        - name: krb5-init
+          image: "{{ .Values.krb5Renewer.image }}"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              export KRB5CCNAME=/tmp/krb5/tgt
+              echo "==> kinit for Hive migration"
+              kinit -kt /keytab/risk-engine.keytab {{ .Values.krb5.principal }}
+              echo "==> Ticket obtained, init container complete"
+          volumeMounts:
+            - name: keytab
+              mountPath: /keytab
+              readOnly: true
+            - name: krb5-cache
+              mountPath: /tmp/krb5
+            - name: hadoop-config
+              mountPath: /etc/krb5.conf
+              subPath: krb5.conf
+              readOnly: true
+      containers:
+        - name: hive-migrate
+          image: "{{ .Values.migrate.image.repository }}:{{ .Values.migrate.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: HIVE_URL
+              value: "{{ .Values.hive.jdbcUrl }}"
+            - name: KRB5CCNAME
+              value: /tmp/krb5/tgt
+          volumeMounts:
+            - name: hadoop-config
+              mountPath: /etc/hive/conf/hive-site.xml
+              subPath: hive-site.xml
+              readOnly: true
+            - name: hadoop-config
+              mountPath: /etc/krb5.conf
+              subPath: krb5.conf
+              readOnly: true
+            - name: krb5-cache
+              mountPath: /tmp/krb5
+      volumes:
+        - name: hadoop-config
+          configMap:
+            name: hadoop-config
+        - name: keytab
+          secret:
+            secretName: {{ include "risk-engine.fullname" . }}-keytab
+            defaultMode: 0400
+        - name: krb5-cache
+          emptyDir: {}
+{{- end }}

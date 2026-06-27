@@ -1,0 +1,7 @@
+---
+apiVersion: v2
+name: risk-engine
+description: Risk calculation engine with HDFS/Hive integration and KRB5 sidecar
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
