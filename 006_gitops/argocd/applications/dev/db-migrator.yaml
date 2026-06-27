@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: db-migrator-dev
+  namespace: argocd
+  annotations:
+    # Wave 0: runs first, before any application services.
+    # The Job inside this chart has argocd.argoproj.io/hook: PreSync,
+    # so it executes even before wave 0 resources are applied — migrations
+    # are guaranteed to finish before Deployments start.
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://github.com/ashokhin/gitops.git
+    targetRevision: HEAD
+    path: helm/db-migrator
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-demo-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

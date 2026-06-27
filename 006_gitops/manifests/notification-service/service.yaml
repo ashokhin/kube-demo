@@ -1,0 +1,26 @@
+# SOURCE: helm/notification-service/templates/service.yaml
+# notification-service has no external HTTP API — it only consumes from RabbitMQ.
+# The Service exists solely to expose /healthz and /metrics endpoints
+# for Kubernetes probes and Prometheus scraping.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-demo-notification-service
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: notification-service-0.1.0
+    app.kubernetes.io/name: notification-service
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: notification-service
+    app.kubernetes.io/instance: kube-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP

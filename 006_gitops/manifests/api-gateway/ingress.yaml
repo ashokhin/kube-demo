@@ -1,0 +1,58 @@
+# SOURCE: helm/api-gateway/templates/ingress.yaml
+# GENERATED FROM:
+#   .Values.ingress.enabled    → {{- if .Values.ingress.enabled }} guard
+#   .Values.ingress.className  → spec.ingressClassName
+#   .Values.ingress.host       → spec.rules[0].host + spec.tls[0].hosts
+#   .Values.ingress.tls.*      → spec.tls (rendered only when tls.enabled=true)
+#   .Values.service.port       → backend.service.port.number
+#
+# Ingress is the recommended way to expose HTTP services externally.
+# One Ingress controller (e.g. nginx) handles ALL services — one cloud LB for the cluster.
+#
+# Flow: External client → Cloud LB → NodePort → nginx Ingress controller pod
+#       → routes by Host header / path → ClusterIP Service → Pod
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kube-demo-api-gateway
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: api-gateway-0.1.0
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  # ingressClassName selects which Ingress controller processes this resource.
+  # Multiple controllers can coexist in one cluster (nginx + traefik + alb).
+  # Without this field the cluster default controller is used.
+  ingressClassName: nginx
+
+  # TLS block is rendered only when .Values.ingress.tls.enabled=true.
+  # Uncomment to enable HTTPS:
+  # tls:
+  #   - hosts:
+  #       - api.kube-demo.local
+  #     # cert-manager creates and auto-renews this Secret.
+  #     # Annotation on Ingress triggers cert-manager:
+  #     #   cert-manager.io/cluster-issuer: letsencrypt-prod
+  #     secretName: api-gateway-tls
+
+  rules:
+    # The Ingress controller matches the incoming Host header against this value.
+    # Requests to other hosts are not routed here.
+    - host: api.kube-demo.local
+      http:
+        paths:
+          - path: /
+            # Prefix: matches /orders, /orders/123, /metrics, etc.
+            # Exact: matches only the precise path.
+            pathType: Prefix
+            backend:
+              service:
+                # Must match Service metadata.name exactly.
+                name: kube-demo-api-gateway
+                port:
+                  # Must match Service spec.ports[0].port (not targetPort).
+                  number: 80

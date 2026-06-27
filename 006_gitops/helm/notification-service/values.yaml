@@ -1,0 +1,120 @@
+# Default values for notification-service.
+
+image:
+  repository: ghcr.io/ashokhin/notification-service
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# Single replica is intentional: one consumer per queue partition.
+# Scale only if you add multiple queues / partitions.
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+config:
+  LOG_LEVEL: "INFO"
+  QUEUE_NAME: "notifications"
+  PORT: "8080"
+  # Path where handlers.yaml is mounted inside the pod.
+  # Must match the volumeMount.mountPath + filename in deployment.yaml.
+  HANDLERS_CONFIG_PATH: "/app/config/handlers.yaml"
+
+# Notification routing rules — mounted as /app/config/handlers.yaml inside the pod.
+#
+# This is the key difference from env vars: a structured YAML file is appropriate
+# when configuration has hierarchy, lists, or would be unreadable as a flat KEY=VALUE.
+# Here: each event_type maps to a list of channels (email, push, sms) with options.
+#
+# Updating this value triggers a pod rollout automatically via the checksum annotation.
+# No image rebuild required — only `helm upgrade` is needed to change routing rules.
+handlersConfig: |
+  handlers:
+    order.created:
+      - type: email
+        template: order_confirmation
+        retry: 3
+      - type: push
+        template: order_created_push
+        retry: 1
+    order.confirmed:
+      - type: email
+        template: order_confirmed
+        retry: 3
+    order.cancelled:
+      - type: email
+        template: order_cancellation
+        retry: 3
+    order.shipped:
+      - type: email
+        template: order_shipped
+        retry: 3
+      - type: sms
+        template: order_shipped_sms
+        retry: 2
+  default:
+    - type: log
+      level: warning
+
+# Placeholder values (CHANGEME) are intentionally fake — never real credentials.
+# Replace via CI/CD pipeline, External Secrets, or Vault at deploy time.
+secrets:
+  RABBITMQ_URL: "amqp://notifications_user:CHANGEME@rabbitmq:5672/"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  path: /metrics
+
+# terminationGracePeriodSeconds must be long enough for the consumer
+# to finish processing the current message before the pod is killed.
+terminationGracePeriodSeconds: 60
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# NetworkPolicy controls whether a NetworkPolicy resource is created for this service.
+# When enabled, restricts ingress/egress traffic to only what is needed.
+networkPolicy:
+  enabled: true
+
+# Each service runs under its own ServiceAccount with no mounted token.
+# This follows the principle of least privilege — pods cannot call the Kubernetes
+# API unless explicitly granted RBAC permissions (none needed for these services).
+serviceAccount:
+  create: true
+  annotations: {}
+
+# When true, secrets are managed by External Secrets Operator (ESO) reading from Vault.
+# The Helm-managed Secret template is disabled — ESO creates the Secret instead.
+# Set to false for local development (docker-compose) or clusters without ESO installed.
+externalSecrets:
+  enabled: false

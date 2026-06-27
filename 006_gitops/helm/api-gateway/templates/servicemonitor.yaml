@@ -1,0 +1,23 @@
+{{- if .Values.serviceMonitor.enabled }}
+# ServiceMonitor is a CRD provided by Prometheus Operator.
+# It tells Prometheus which Services to scrape and how.
+# Without Prometheus Operator, configure scrape targets in prometheus.yml manually.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "api-gateway.fullname" . }}
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+    # This label must match the Prometheus Operator's serviceMonitorSelector.
+    # Check your kube-prometheus-stack values: prometheus.prometheusSpec.serviceMonitorSelector
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      # Prometheus will discover Services that carry these labels.
+      {{- include "api-gateway.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: {{ .Values.serviceMonitor.path }}
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}

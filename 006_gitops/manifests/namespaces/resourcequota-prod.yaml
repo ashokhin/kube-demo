@@ -1,0 +1,16 @@
+# ResourceQuota caps the total resources the kube-demo-prod namespace can consume.
+# Prevents a misconfigured service from starving other namespaces on the node.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: kube-demo-quota
+  namespace: kube-demo-prod
+spec:
+  hard:
+    requests.cpu: "16"
+    requests.memory: 16Gi
+    limits.cpu: "32"
+    limits.memory: 32Gi
+    pods: "100"
+    services: "10"
+    persistentvolumeclaims: "5"

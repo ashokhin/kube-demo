@@ -1,0 +1,23 @@
+# PodDisruptionBudget for order-service
+#
+# Problem: during a node drain (kubectl drain) or a rolling update, Kubernetes
+# may attempt to evict all order-service pods at once if no budget is set.
+# This would cause in-flight order writes and RabbitMQ consumers to fail,
+# potentially resulting in lost messages or duplicate processing.
+#
+# Solution: minAvailable: 1 guarantees that at least one pod stays running
+# throughout any voluntary disruption. The node drain or rollout will wait
+# until a replacement pod is Ready before evicting the next one.
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "order-service.fullname" . }}
+  labels:
+    {{- include "order-service.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "order-service.selectorLabels" . | nindent 6 }}
+{{- end }}

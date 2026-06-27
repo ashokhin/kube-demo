@@ -1,0 +1,18 @@
+db-migrator Job has been submitted to namespace {{ .Release.Namespace }}.
+
+NOTE: The Job auto-deletes {{ .Values.ttlSecondsAfterFinished }} seconds after completion.
+      Retrieve logs before that window closes.
+
+Check Job status:
+  kubectl get jobs -n {{ .Release.Namespace }} -l app.kubernetes.io/name=db-migrator
+
+View Job logs:
+  kubectl logs -n {{ .Release.Namespace }} \
+    -l app.kubernetes.io/name=db-migrator \
+    --tail=100
+
+Wait for Job completion:
+  kubectl wait --for=condition=complete job \
+    -l app.kubernetes.io/name=db-migrator \
+    -n {{ .Release.Namespace }} \
+    --timeout=120s

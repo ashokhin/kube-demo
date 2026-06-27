@@ -1,0 +1,103 @@
+# kube-prometheus-stack for production environment.
+# Differences from dev/staging:
+#   - Grafana persistence enabled (data survives pod restarts)
+#   - Prometheus retention extended to 30d
+#   - Grafana exposed via Ingress (not just port-forward)
+#   - Higher resource requests to handle production load
+#
+# IMPORTANT: install this Application BEFORE the service Applications.
+# ServiceMonitor CRDs must exist before ArgoCD applies service Helm charts.
+# Use sync wave -1 to ensure ordering.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"   # deploy before all services
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: "58.x"
+    helm:
+      releaseName: monitoring
+      values: |
+        grafana:
+          enabled: true
+          adminPassword: CHANGEME   # override via external secret in prod
+          ingress:
+            enabled: true
+            hosts:
+              - grafana.kube-demo.example.com
+            tls:
+              - secretName: grafana-tls
+                hosts:
+                  - grafana.kube-demo.example.com
+          persistence:
+            enabled: true
+            size: 10Gi
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+        prometheus:
+          prometheusSpec:
+            scrapeInterval: 30s
+            retention: 30d   # longer retention for prod audit and trend analysis
+            # Pick up ServiceMonitors from all namespaces (kube-demo-prod, etc.)
+            serviceMonitorNamespaceSelector: {}
+            serviceMonitorSelector: {}
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 50Gi
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                cpu: 1000m
+                memory: 2Gi
+
+        # Alertmanager — enabled in prod, configure receivers (PagerDuty, Slack, etc.)
+        alertmanager:
+          enabled: true
+          alertmanagerSpec:
+            replicas: 2   # HA in prod
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+
+        prometheus-node-exporter:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+
+        kube-state-metrics:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-monitoring
+  syncPolicy:
+    automated:
+      selfHeal: true
+      # prune: false for prod safety — do not auto-delete monitoring resources;
+      # require explicit git change + review before removal.
+      prune: false
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # required for kube-prometheus-stack CRDs

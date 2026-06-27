@@ -1,0 +1,9 @@
+# Environment-specific values for report-generator — prod environment.
+# This file is layered ON TOP of values.yaml by ArgoCD:
+#   helm.valueFiles: [values.yaml, values-prod.yaml]
+# Only values that differ from defaults are listed here.
+# Schedule is kept at the default weekly run defined in values.yaml.
+
+image:
+  repository: nexus.company.internal/kube-demo/report-generator
+  tag: "1.0.0"

@@ -1,0 +1,19 @@
+# SOURCE: helm/notification-service/templates/configmap.yaml
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-demo-notification-service
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: notification-service-0.1.0
+    app.kubernetes.io/name: notification-service
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  LOG_LEVEL: "INFO"
+  # The queue name the consumer subscribes to.
+  # Changing this value triggers a pod rollout (checksum annotation).
+  QUEUE_NAME: "notifications"
+  PORT: "8080"

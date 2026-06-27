@@ -1,0 +1,63 @@
+# Default values for report-generator.
+
+image:
+  repository: ghcr.io/ashokhin/report-generator
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# Standard cron syntax (UTC). Default: every day at 06:00.
+schedule: "0 6 * * *"
+
+# Forbid: skip the new run if the previous one is still running.
+# Useful for reports that must not overlap (e.g. they write to the same file).
+concurrencyPolicy: Forbid
+
+# If the cluster was down and the scheduled time was missed, only start
+# the job if it's less than this many seconds late. 0 = always start.
+startingDeadlineSeconds: 300
+
+config:
+  LOG_LEVEL: "INFO"
+  REPORT_OUTPUT_PATH: "/reports"
+  REPORT_PERIOD_DAYS: "7"
+
+# Placeholder values (CHANGEME) are intentionally fake — never real credentials.
+# Replace via CI/CD pipeline, External Secrets, or Vault at deploy time.
+secrets:
+  DATABASE_URL: "postgresql://orders_user:CHANGEME@postgresql:5432/orders"
+
+# PVC where reports are written. Mount it read-write in the job pod.
+reportVolume:
+  enabled: true
+  claimName: report-generator-pvc
+  storageClass: standard
+  size: 1Gi
+
+backoffLimit: 2
+ttlSecondsAfterFinished: 300
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# NetworkPolicy controls whether a NetworkPolicy resource is created for this service.
+# When enabled, restricts ingress/egress traffic to only what is needed.
+networkPolicy:
+  enabled: true
+
+# Each service runs under its own ServiceAccount with no mounted token.
+# This follows the principle of least privilege — pods cannot call the Kubernetes
+# API unless explicitly granted RBAC permissions (none needed for these services).
+serviceAccount:
+  create: true
+  annotations: {}
+
+# When true, secrets are managed by External Secrets Operator (ESO) reading from Vault.
+# The Helm-managed Secret template is disabled — ESO creates the Secret instead.
+# Set to false for local development (docker-compose) or clusters without ESO installed.
+externalSecrets:
+  enabled: false

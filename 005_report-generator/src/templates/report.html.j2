@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Order Report {{ period_start }} – {{ period_end }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 720px; margin: 40px auto; color: #333; }
+    h1   { color: #1a1a2e; }
+    .meta { color: #666; font-size: 0.9em; margin-bottom: 2em; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+    th    { background: #1a1a2e; color: white; padding: 10px 14px; text-align: left; }
+    td    { padding: 10px 14px; border-bottom: 1px solid #ddd; }
+    tr:hover td { background: #f5f5f5; }
+    .total { font-weight: bold; }
+    .bar-wrap { background: #eee; border-radius: 4px; height: 12px; width: 200px; display: inline-block; }
+    .bar      { background: #4a90d9; border-radius: 4px; height: 12px; display: block; }
+    .pending   .bar { background: #f0a500; }
+    .confirmed .bar { background: #27ae60; }
+    .cancelled .bar { background: #e74c3c; }
+  </style>
+</head>
+<body>
+  <h1>Order Summary Report</h1>
+  <div class="meta">
+    Period: <strong>{{ period_start }}</strong> – <strong>{{ period_end }}</strong>
+    &nbsp;|&nbsp;
+    Generated: {{ generated_at }}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Count</th>
+        <th>Share</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr class="{{ row.status }}">
+        <td>{{ row.status }}</td>
+        <td>{{ row.count }}</td>
+        <td>{{ "%.1f"|format(row.pct) }}%</td>
+        <td>
+          <span class="bar-wrap">
+            {# Bar width proportional to percentage — visual quick-read #}
+            <span class="bar" style="width: {{ row.pct | round | int }}%"></span>
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+      <tr class="total">
+        <td>Total</td>
+        <td>{{ total_orders }}</td>
+        <td>100%</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

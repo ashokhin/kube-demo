@@ -1,0 +1,69 @@
+# Grafana Loki — log aggregation backend.
+# Loki stores only log metadata (labels) in its index, not the full log content.
+# This makes it 10-50x cheaper than Elasticsearch for the same log volume.
+#
+# Loki does NOT replace Elasticsearch for full-text search across log content —
+# use OpenSearch if you need that. Loki excels at label-based filtering:
+# "show me all ERROR logs from order-service in the last 1 hour".
+#
+# Logs flow: Grafana Alloy (DaemonSet) → Loki → Grafana (LogQL queries)
+# Grafana is already installed via kube-prometheus-stack — Loki adds as a datasource.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"   # deploy before services, same wave as monitoring
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: "6.x"
+    helm:
+      releaseName: loki
+      values: |
+        loki:
+          auth_enabled: false   # single-tenant mode for dev simplicity
+          commonConfig:
+            replication_factor: 1   # dev: single replica, no HA
+          storage:
+            type: filesystem        # dev: local filesystem (use S3 in prod)
+          schemaConfig:
+            configs:
+              - from: "2024-01-01"
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index:
+                  prefix: loki_index_
+                  period: 24h
+
+        deploymentMode: SingleBinary   # dev: all components in one pod
+
+        singleBinary:
+          replicas: 1
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          persistence:
+            enabled: true
+            size: 10Gi
+
+        # Grafana datasource — auto-configure Loki in the existing Grafana instance
+        grafana-agent:
+          enabled: false   # we use Alloy instead
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "db-migrator.fullname" . }}
+  labels:
+    {{- include "db-migrator.labels" . | nindent 4 }}
+  annotations:
+    # ArgoCD hook annotations control WHEN this Job runs in the sync lifecycle.
+    #
+    # PreSync: Job runs BEFORE ArgoCD applies other resources (Deployments, etc.).
+    # This guarantees: migrations applied → services start with up-to-date schema.
+    #
+    # Without this, ArgoCD would apply everything in parallel and services might
+    # start before the schema is ready.
+    argocd.argoproj.io/hook: PreSync
+    #
+    # BeforeHookCreation: delete the old Job before creating a new one.
+    # Required because Job names are immutable; a new deploy would fail
+    # if the previous Job object still exists.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  # Retry up to backoffLimit times if the pod fails.
+  # The pod is retried (not restarted in place) — a new pod is created each time.
+  backoffLimit: {{ .Values.backoffLimit }}
+  # Delete the Job object automatically N seconds after completion.
+  # The pod logs are available in your log aggregator before this kicks in.
+  ttlSecondsAfterFinished: {{ .Values.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "db-migrator.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "db-migrator.fullname" . }}
+      # Never restart: if alembic exits with non-zero, create a new pod (backoffLimit).
+      # OnFailure would restart the same pod — bad for migrations (re-runs partial state).
+      restartPolicy: Never
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # CMD in Dockerfile: alembic --config src/alembic.ini upgrade head
+          # No override needed here; the image already knows what to do.
+          envFrom:
+            {{- if .Values.secrets }}
+            - secretRef:
+                name: {{ include "db-migrator.fullname" . }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

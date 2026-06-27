@@ -1,0 +1,45 @@
+# Build backend: pdm-backend — the build backend extracted from PDM (Python
+# Dependency Manager). Modern, fast, and fully PEP 621-compliant. Like hatchling,
+# it reads [project] as the source of truth, so migrating between the two is
+# usually just a one-line change in [build-system].
+#
+# pdm-backend also supports PEP 660 (editable installs via pyproject.toml),
+# which makes it convenient for local development without setup.py.
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+# Standard PEP 621 [project] table — identical in structure to hatchling and
+# setuptools (>=61). Switching to hatchling is literally changing two lines above.
+[project]
+name = "report-generator"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    "jinja2>=3.1.0",
+    "pydantic-settings>=2.6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+]
+
+# Tell pdm-backend which directories contain the package source.
+[tool.pdm.build]
+includes = ["src/"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true

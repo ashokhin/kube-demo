@@ -1,0 +1,44 @@
+# Build backend: poetry-core — the build backend extracted from Poetry.
+# Many teams adopted Poetry as an all-in-one tool (dependency management +
+# packaging), so their projects use [tool.poetry] instead of the standard
+# PEP 621 [project] table. This is the key difference from all other backends:
+# poetry-core does NOT read [project] — it reads [tool.poetry] only.
+#
+# When migrating AWAY from poetry-core to a standard backend (setuptools,
+# hatchling, pdm-backend), you must translate [tool.poetry.dependencies]
+# into [project.dependencies]. The formats differ:
+#   poetry:  python = "^3.12"        (uses ^ and ~ operators)
+#   PEP 621: requires-python = ">=3.12"  (uses PEP 440 specifiers)
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+# poetry-core reads metadata exclusively from [tool.poetry], not [project].
+[tool.poetry]
+name = "db-migrator"
+version = "0.1.0"
+description = "One-shot Alembic migration job"
+authors = []
+packages = [{ include = "src" }]
+
+# poetry uses its own version specifier syntax (^ means compatible release).
+# ^ 3.12 means >=3.12, <4.0
+[tool.poetry.dependencies]
+python = "^3.12"
+alembic = ">=1.14.0"
+sqlalchemy = ">=2.0.0"
+psycopg2-binary = ">=2.9.0"
+pydantic-settings = ">=2.6.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0.0"
+ruff = ">=0.8.0"
+mypy = ">=1.13.0"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true

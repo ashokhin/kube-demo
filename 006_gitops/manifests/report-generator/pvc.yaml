@@ -1,0 +1,32 @@
+# PersistentVolumeClaim for storing generated reports.
+# Not rendered by the Helm chart template directly — in the chart it is referenced
+# by name (.Values.reportVolume.claimName). The PVC itself should be created
+# separately (or as part of an infrastructure Helm chart) to avoid Helm
+# deleting it during helm uninstall.
+#
+# WHY A SEPARATE PVC?
+# If the PVC were inside the report-generator chart and someone ran
+# "helm uninstall report-generator", Helm would delete the PVC and all reports with it.
+# Keeping storage separate from the application chart protects data from accidental deletion.
+#
+# In production: use a StorageClass that provisions cloud-native persistent volumes
+# (e.g. gp3 on AWS EBS, pd-ssd on GCP) with ReclaimPolicy: Retain.
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: report-generator-pvc
+  namespace: kube-demo
+  labels:
+    app.kubernetes.io/name: report-generator
+    app.kubernetes.io/instance: kube-demo
+spec:
+  accessModes:
+    # ReadWriteOnce: the volume can be mounted as read-write by a single node.
+    # For CronJob this is fine — only one Job pod runs at a time (concurrencyPolicy: Forbid).
+    # ReadWriteMany would be needed if multiple pods on different nodes wrote simultaneously.
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 1Gi

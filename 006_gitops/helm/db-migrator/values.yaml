@@ -1,0 +1,45 @@
+# Default values for db-migrator.
+
+image:
+  repository: ghcr.io/ashokhin/db-migrator
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# Placeholder values (CHANGEME) are intentionally fake — never real credentials.
+# Replace via CI/CD pipeline, External Secrets, or Vault at deploy time.
+secrets:
+  DATABASE_URL: "postgresql://orders_user:CHANGEME@postgresql:5432/orders"
+
+# Kubernetes retries the Job pod up to backoffLimit times on failure.
+# Keep low: if migrations fail twice something is seriously wrong.
+backoffLimit: 2
+
+# Automatically delete the Job N seconds after it completes (success or failure).
+# Keeps the cluster clean without losing logs (logs are in your log aggregator by then).
+ttlSecondsAfterFinished: 300
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# NetworkPolicy controls whether a NetworkPolicy resource is created for this service.
+# When enabled, restricts ingress/egress traffic to only what is needed.
+networkPolicy:
+  enabled: true
+
+# Each service runs under its own ServiceAccount with no mounted token.
+# This follows the principle of least privilege — pods cannot call the Kubernetes
+# API unless explicitly granted RBAC permissions (none needed for these services).
+serviceAccount:
+  create: true
+  annotations: {}
+
+# When true, secrets are managed by External Secrets Operator (ESO) reading from Vault.
+# The Helm-managed Secret template is disabled — ESO creates the Secret instead.
+# Set to false for local development (docker-compose) or clusters without ESO installed.
+externalSecrets:
+  enabled: false

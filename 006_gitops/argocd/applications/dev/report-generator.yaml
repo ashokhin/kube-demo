@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: report-generator-dev
+  namespace: argocd
+  annotations:
+    # Wave 3: last, after all services are up.
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://github.com/ashokhin/gitops.git
+    targetRevision: HEAD
+    path: helm/report-generator
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-demo-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

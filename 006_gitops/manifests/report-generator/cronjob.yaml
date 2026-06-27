@@ -1,0 +1,104 @@
+# SOURCE: helm/report-generator/templates/cronjob.yaml
+# GENERATED FROM:
+#   .Values.schedule                 → spec.schedule
+#   .Values.concurrencyPolicy        → spec.concurrencyPolicy
+#   .Values.startingDeadlineSeconds  → spec.startingDeadlineSeconds
+#   .Values.backoffLimit             → spec.jobTemplate.spec.backoffLimit
+#   .Values.ttlSecondsAfterFinished  → spec.jobTemplate.spec.ttlSecondsAfterFinished
+#   .Values.reportVolume.*           → volumes + volumeMounts
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# WHY CRONJOB, NOT DEPLOYMENT OR JOB?
+# ─────────────────────────────────────────────────────────────────────────────
+# Deployment: runs forever, restarts on crash → wrong for a batch task
+# Job:        runs once until success → wrong if you need it to repeat
+# CronJob:    creates a new Job on each scheduled trigger → correct
+#
+# CronJob is a controller that owns Jobs, which own Pods:
+#   CronJob → (on schedule) → Job → Pod
+#
+# Each triggered Job runs to completion independently.
+# Old Jobs are kept in history (successfulJobsHistoryLimit / failedJobsHistoryLimit).
+# ─────────────────────────────────────────────────────────────────────────────
+# IMPORTANT: THE APPLICATION MUST BE IDEMPOTENT
+# ─────────────────────────────────────────────────────────────────────────────
+# If startingDeadlineSeconds allows a missed run to be caught up, or if
+# backoffLimit > 0 causes a retry, the same time period's data will be queried again.
+# The report must produce the same result regardless of how many times it runs
+# for the same period — writing to the same filename is one way to achieve this.
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kube-demo-report-generator
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: report-generator-0.1.0
+    app.kubernetes.io/name: report-generator
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  # Standard Unix cron syntax, always interpreted as UTC.
+  # "0 6 * * *" = at 06:00 every day.
+  # Tip: use https://crontab.guru to validate your expression.
+  schedule: "0 6 * * *"
+
+  # What to do if a Job is still running when the next scheduled time arrives.
+  # Forbid  → skip the new run (safe: avoids duplicate reports writing to the same file)
+  # Allow   → start a new Job in parallel (risk: two jobs write different data to same file)
+  # Replace → cancel the running Job and start fresh (risk: incomplete report)
+  concurrencyPolicy: Forbid
+
+  # If the cluster was unavailable and the scheduled time was missed,
+  # only trigger a catch-up run if it's less than 300 seconds late.
+  # Without this, a cluster outage could trigger a flood of catch-up Jobs.
+  # Set to 0 to disable the deadline (always catch up regardless of delay).
+  startingDeadlineSeconds: 300
+
+  # Keep the last N Job objects (pod logs are accessible as long as the Job exists).
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 300
+      template:
+        metadata:
+          labels:
+            helm.sh/chart: report-generator-0.1.0
+            app.kubernetes.io/name: report-generator
+            app.kubernetes.io/instance: kube-demo
+            app.kubernetes.io/version: "0.1.0"
+            app.kubernetes.io/managed-by: Helm
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: report-generator
+              image: "ghcr.io/ashokhin/report-generator:0.1.0"
+              imagePullPolicy: IfNotPresent
+              # The container CMD runs: python -m src.main
+              # It queries PostgreSQL, writes JSON+CSV to REPORT_OUTPUT_PATH, and exits.
+              envFrom:
+                - configMapRef:
+                    name: kube-demo-report-generator
+                - secretRef:
+                    name: kube-demo-report-generator
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+              volumeMounts:
+                - name: reports
+                  # Must match REPORT_OUTPUT_PATH env var from ConfigMap.
+                  mountPath: /reports
+          volumes:
+            - name: reports
+              persistentVolumeClaim:
+                # Must match the PVC name in pvc.yaml.
+                claimName: report-generator-pvc

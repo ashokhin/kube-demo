@@ -1,0 +1,136 @@
+# Default values for order-service.
+
+image:
+  repository: ghcr.io/ashokhin/order-service
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+config:
+  LOG_LEVEL: "INFO"
+  PORT: "8080"
+  ORDERS_EXCHANGE: "orders"
+
+# Sensitive values — stored in Kubernetes Secret, injected via envFrom.
+# Placeholder values below are intentionally fake (CHANGEME).
+# In real deployments these are never stored in git — use External Secrets,
+# Vault, or inject via CI/CD pipeline at deploy time.
+secrets:
+  # asyncpg driver — used by SQLAlchemy async engine in the application.
+  DATABASE_URL: "postgresql+asyncpg://orders_user:CHANGEME@postgresql:5432/orders"
+  # Standard psycopg2 driver — used by golang-migrate init container.
+  # golang-migrate does not understand the +asyncpg dialect suffix.
+  MIGRATE_DATABASE_URL: "postgresql://orders_user:CHANGEME@postgresql:5432/orders"
+  RABBITMQ_URL: "amqp://orders_user:CHANGEME@rabbitmq:5672/"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  path: /metrics
+
+# Init container that runs golang-migrate before the application starts.
+#
+# How it works:
+#   Kubernetes starts initContainers sequentially before any main container.
+#   The application container does not start until all init containers exit with code 0.
+#   If the migration fails, the pod restarts (respecting restartPolicy) and retries.
+#
+# Comparison with the Job/PreSync hook approach (004_db-migrator):
+#
+#   Init container                    Job (PreSync hook)
+#   ─────────────────────────────     ──────────────────────────────────
+#   Runs on every pod start           Runs once per ArgoCD sync
+#   Part of the application pod       Separate pod, separate image
+#   No ArgoCD coordination needed     Requires sync wave ordering
+#   Migrations must be idempotent *   Migrations must be idempotent *
+#   Simpler setup                     More explicit control
+#
+#   * golang-migrate is idempotent by design: it tracks applied versions
+#     in the schema_migrations table and skips already-applied migrations.
+migrations:
+  enabled: false
+  image:
+    # Built from Dockerfile.migrate in the order-service repo.
+    # Tag is kept in sync with the application image tag.
+    repository: nexus.company.internal/kube-demo/order-service-migrate
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# NetworkPolicy controls whether a NetworkPolicy resource is created for this service.
+# When enabled, restricts ingress/egress traffic to only what is needed.
+networkPolicy:
+  enabled: true
+
+# PodDisruptionBudget ensures at least 1 pod is always available during voluntary
+# disruptions (e.g. kubectl drain, rolling updates). Without a PDB, all pods could
+# be evicted simultaneously leaving the order-service unavailable.
+podDisruptionBudget:
+  enabled: true
+
+# Each service runs under its own ServiceAccount with no mounted token.
+# This follows the principle of least privilege — pods cannot call the Kubernetes
+# API unless explicitly granted RBAC permissions (none needed for these services).
+serviceAccount:
+  create: true
+  annotations: {}
+
+# topologySpreadConstraints distributes pods evenly across failure domains
+# (nodes, availability zones). Without this, the scheduler may place all replicas
+# on the same node — a single node failure would take down the entire service.
+#
+# enabled: true  — two rules applied: spread across zones, then across nodes.
+# maxSkew: 1     — allow at most 1 extra pod on any domain compared to others.
+# whenUnsatisfiable: DoNotSchedule — hard constraint (use ScheduleAnyway in dev).
+#
+# labelSelector is injected automatically in deployment.yaml using selectorLabels.
+topologySpreadConstraints:
+  enabled: true
+  maxSkew: 1
+  whenUnsatisfiable: DoNotSchedule
+
+# When true, secrets are managed by External Secrets Operator (ESO) reading from Vault.
+# The Helm-managed Secret template is disabled — ESO creates the Secret instead.
+# Set to false for local development (docker-compose) or clusters without ESO installed.
+externalSecrets:
+  enabled: false

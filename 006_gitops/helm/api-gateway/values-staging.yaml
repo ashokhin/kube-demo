@@ -1,0 +1,19 @@
+# Environment-specific values for api-gateway — staging environment.
+# This file is layered ON TOP of values.yaml by ArgoCD:
+#   helm.valueFiles: [values.yaml, values-staging.yaml]
+# Only values that differ from defaults are listed here.
+
+image:
+  repository: nexus.company.internal/kube-demo/api-gateway
+  tag: "staging-latest"
+
+replicaCount: 1
+
+config:
+  LOG_LEVEL: "INFO"
+
+ingress:
+  host: "api.staging.kube-demo.internal"
+
+autoscaling:
+  enabled: false

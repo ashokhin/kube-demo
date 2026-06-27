@@ -1,0 +1,18 @@
+report-generator CronJob has been deployed to namespace {{ .Release.Namespace }}.
+
+Schedule: {{ .Values.schedule }} (UTC)
+
+Check CronJob status:
+  kubectl get cronjob -n {{ .Release.Namespace }} -l app.kubernetes.io/name=report-generator
+
+List Jobs triggered by this CronJob:
+  kubectl get jobs -n {{ .Release.Namespace }} -l app.kubernetes.io/name=report-generator
+
+Manually trigger a report run now:
+  kubectl create job --from=cronjob/{{ .Release.Name }}-report-generator \
+    manual-report-$(date +%s) -n {{ .Release.Namespace }}
+
+List generated reports on the PVC (exec into a completed job pod):
+  kubectl run tmp --rm -it --image=busybox --restart=Never \
+    --overrides='{"spec":{"volumes":[{"name":"reports","persistentVolumeClaim":{"claimName":"{{ .Values.reportVolume.claimName }}"}}],"containers":[{"name":"tmp","image":"busybox","command":["ls","-lh","/reports"],"volumeMounts":[{"name":"reports","mountPath":"/reports"}]}]}}' \
+    -- ls /reports

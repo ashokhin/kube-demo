@@ -1,0 +1,22 @@
+# PodDisruptionBudget for api-gateway
+#
+# Problem: during a node drain (kubectl drain) or a rolling update, Kubernetes
+# may attempt to evict all api-gateway pods at once if no budget is set.
+# This would leave the external-facing gateway completely unavailable.
+#
+# Solution: minAvailable: 1 guarantees that at least one pod stays running
+# throughout any voluntary disruption. The node drain or rollout will wait
+# until a replacement pod is Ready before evicting the next one.
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "api-gateway.fullname" . }}
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "api-gateway.selectorLabels" . | nindent 6 }}
+{{- end }}

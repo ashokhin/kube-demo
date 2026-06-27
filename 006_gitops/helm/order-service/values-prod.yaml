@@ -1,0 +1,13 @@
+# Environment-specific values for order-service — prod environment.
+# This file is layered ON TOP of values.yaml by ArgoCD:
+#   helm.valueFiles: [values.yaml, values-prod.yaml]
+# Only values that differ from defaults are listed here.
+
+image:
+  repository: nexus.company.internal/kube-demo/order-service
+  tag: "1.0.0"
+
+replicaCount: 2
+
+autoscaling:
+  enabled: true

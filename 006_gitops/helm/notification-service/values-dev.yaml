@@ -1,0 +1,21 @@
+# Environment-specific values for notification-service — dev environment.
+# This file is layered ON TOP of values.yaml by ArgoCD:
+#   helm.valueFiles: [values.yaml, values-dev.yaml]
+# Only values that differ from defaults are listed here.
+
+image:
+  repository: nexus.company.internal/kube-demo/notification-service
+  tag: "dev-latest"
+
+replicaCount: 1
+
+config:
+  LOG_LEVEL: "DEBUG"
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi

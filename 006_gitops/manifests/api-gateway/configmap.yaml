@@ -1,0 +1,55 @@
+# SOURCE: helm/api-gateway/templates/configmap.yaml
+# GENERATED FROM:
+#   .Values.config.*  →  data.*
+#
+# ConfigMap stores NON-SENSITIVE configuration only.
+# Every key here becomes an environment variable in the pod (via envFrom.configMapRef).
+#
+# Why ConfigMap and not hardcoded env vars in the Deployment?
+#   - ConfigMap can be updated without rebuilding the image.
+#   - The same image runs in dev/staging/prod with different ConfigMaps.
+#   - ConfigMap changes are visible in git history (GitOps audit trail).
+#
+# Why not put secrets here?
+#   - ConfigMap data is stored in etcd in plaintext.
+#   - Anyone with "get configmap" RBAC permission can read it.
+#   - Secrets are also plaintext in etcd by default, but can be encrypted
+#     at rest (EncryptionConfiguration) and access-controlled separately.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # Name: Release.Name + Chart.Name, truncated to 63 chars (DNS label limit).
+  # Helm template: {{ include "api-gateway.fullname" . }}
+  # With release name "kube-demo": kube-demo-api-gateway
+  name: kube-demo-api-gateway
+
+  # Namespace is not in the template file itself — it comes from:
+  #   helm install --namespace kube-demo
+  # or from the ArgoCD Application .spec.destination.namespace
+  namespace: kube-demo
+
+  # Labels come from _helpers.tpl → "api-gateway.labels".
+  # helm.sh/chart     — lets "helm list" and "helm status" find all chart resources.
+  # app.kubernetes.io — standard recommended labels; used by dashboards and tooling.
+  labels:
+    helm.sh/chart: api-gateway-0.1.0
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+
+data:
+  # Each key becomes an env var name in the pod.
+  # Source: .Values.config in values.yaml → toYaml → ConfigMap.data
+
+  # The app reads this as ORDER_SERVICE_URL env var.
+  # Value format: http://<Service-name>.<namespace>.svc.cluster.local:<port>
+  # Short form (http://order-service:80) works within the same namespace.
+  ORDER_SERVICE_URL: "http://kube-demo-order-service:80"
+
+  LOG_LEVEL: "INFO"
+
+  # The port uvicorn listens on inside the container.
+  # Must match containerPort in the Deployment and targetPort in the Service.
+  PORT: "8080"

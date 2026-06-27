@@ -1,0 +1,64 @@
+# Grafana Loki — log aggregation backend for staging environment.
+# Same architecture as dev (SingleBinary) but with slightly more resources
+# to handle production-like load during integration testing.
+#
+# Logs flow: Grafana Alloy (DaemonSet) → Loki → Grafana (LogQL queries)
+# Grafana is already installed via kube-prometheus-stack — Loki adds as a datasource.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki-staging
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"   # deploy before services, same wave as monitoring
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: "6.x"
+    helm:
+      releaseName: loki
+      values: |
+        loki:
+          auth_enabled: false   # single-tenant mode
+          commonConfig:
+            replication_factor: 1   # staging: single replica, no HA
+          storage:
+            type: filesystem        # staging: local filesystem
+          schemaConfig:
+            configs:
+              - from: "2024-01-01"
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index:
+                  prefix: loki_index_
+                  period: 24h
+
+        deploymentMode: SingleBinary
+
+        singleBinary:
+          replicas: 1
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+            limits:
+              cpu: 750m
+              memory: 768Mi
+          persistence:
+            enabled: true
+            size: 20Gi
+
+        grafana-agent:
+          enabled: false   # we use Alloy instead
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

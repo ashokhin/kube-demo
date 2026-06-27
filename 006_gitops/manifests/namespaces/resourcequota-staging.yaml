@@ -1,0 +1,16 @@
+# ResourceQuota caps the total resources the kube-demo-staging namespace can consume.
+# Prevents a misconfigured service from starving other namespaces on the node.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: kube-demo-quota
+  namespace: kube-demo-staging
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 8Gi
+    limits.cpu: "16"
+    limits.memory: 16Gi
+    pods: "40"
+    services: "10"
+    persistentvolumeclaims: "5"

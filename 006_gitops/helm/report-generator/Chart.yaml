@@ -1,0 +1,6 @@
+apiVersion: v2
+name: report-generator
+description: Scheduled CronJob that generates order summary reports
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

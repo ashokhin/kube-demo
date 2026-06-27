@@ -1,0 +1,195 @@
+# =============================================================================
+# kube-demo docker-compose.yaml
+#
+# PASSWORDS: All passwords are set to CHANGEME — FOR DEMO/LOCAL USE ONLY.
+# Never use these credentials in production.
+#
+# Usage:
+#   Start infrastructure + core services:
+#     docker compose up -d
+#
+#   Run database migrations (one-off):
+#     docker compose --profile migration run --rm db-migrator
+#
+#   Generate reports (one-off):
+#     docker compose --profile reports run --rm report-generator
+#
+#   Tear down everything (including volumes):
+#     docker compose down -v
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure
+  # ---------------------------------------------------------------------------
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: orders_user
+      # Demo-only password — change before any real deployment
+      POSTGRES_PASSWORD: CHANGEME
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - kube-demo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orders_user -d orders"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    environment:
+      RABBITMQ_DEFAULT_USER: orders_user
+      # Demo-only password — change before any real deployment
+      RABBITMQ_DEFAULT_PASS: CHANGEME
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - kube-demo
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Application services
+  # ---------------------------------------------------------------------------
+
+  api-gateway:
+    build:
+      context: ./001_api-gateway
+      dockerfile: Dockerfile
+    environment:
+      # Point to order-service container name on the shared network
+      ORDER_SERVICE_URL: http://order-service:8080
+      LOG_LEVEL: DEBUG
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    networks:
+      - kube-demo
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  order-service:
+    build:
+      context: ./002_order-service
+      dockerfile: Dockerfile
+    environment:
+      # Demo-only password — change before any real deployment
+      DATABASE_URL: postgresql+asyncpg://orders_user:CHANGEME@postgres:5432/orders
+      MIGRATE_DATABASE_URL: postgresql://orders_user:CHANGEME@postgres:5432/orders
+      RABBITMQ_URL: amqp://orders_user:CHANGEME@rabbitmq:5672/
+      ORDERS_EXCHANGE: orders
+      LOG_LEVEL: DEBUG
+      PORT: "8080"
+    ports:
+      - "8081:8080"
+    networks:
+      - kube-demo
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ./003_notification-service
+      dockerfile: Dockerfile
+    environment:
+      # Demo-only password — change before any real deployment
+      RABBITMQ_URL: amqp://orders_user:CHANGEME@rabbitmq:5672/
+      QUEUE_NAME: notifications
+      LOG_LEVEL: DEBUG
+      PORT: "8080"
+      # In Kubernetes this is set to the ConfigMap volume mount path (/app/config/handlers.yaml).
+      # Locally the service falls back to src/handlers_config.yaml — leave this unset.
+      # HANDLERS_CONFIG_PATH: /app/config/handlers.yaml
+    ports:
+      - "8082:8080"
+    networks:
+      - kube-demo
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # One-off services (not started by default)
+  # ---------------------------------------------------------------------------
+
+  db-migrator:
+    build:
+      context: ./004_db-migrator
+      dockerfile: Dockerfile
+    environment:
+      # Demo-only password — change before any real deployment
+      DATABASE_URL: postgresql://orders_user:CHANGEME@postgres:5432/orders
+    networks:
+      - kube-demo
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Run once and exit — no restart
+    restart: "no"
+    profiles:
+      - migration
+
+  report-generator:
+    build:
+      context: ./005_report-generator
+      dockerfile: Dockerfile
+    environment:
+      # Demo-only password — change before any real deployment
+      DATABASE_URL: postgresql://orders_user:CHANGEME@postgres:5432/orders
+      REPORT_OUTPUT_PATH: /reports
+      REPORT_PERIOD_DAYS: "7"
+      LOG_LEVEL: DEBUG
+    volumes:
+      - report-output:/reports
+    networks:
+      - kube-demo
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Run once and exit — no restart
+    restart: "no"
+    profiles:
+      - reports
+
+# ---------------------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------------------
+
+volumes:
+  postgres-data:
+    driver: local
+  report-output:
+    driver: local
+
+# ---------------------------------------------------------------------------
+# Networks
+# ---------------------------------------------------------------------------
+
+networks:
+  kube-demo:
+    driver: bridge

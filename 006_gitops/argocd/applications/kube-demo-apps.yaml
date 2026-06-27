@@ -1,0 +1,68 @@
+# App of Apps pattern — root Application for the dev environment.
+#
+# What is "App of Apps"?
+# ----------------------
+# In the standard ArgoCD workflow you apply each Application manifest manually:
+#   kubectl apply -f applications/dev/api-gateway.yaml
+#   kubectl apply -f applications/dev/order-service.yaml
+#   ...
+#
+# This is error-prone: you must remember to apply every file, in the right order,
+# and re-apply when new services are added. It also means the Application manifests
+# themselves are NOT tracked by ArgoCD — only their targets are.
+#
+# The App of Apps pattern solves this by treating Application manifests as just
+# another set of Kubernetes resources that ArgoCD manages:
+#
+#   1. You apply ONE root Application (this file) manually — just once.
+#   2. The root Application points to a directory of other Application manifests
+#      (e.g. applications/dev/).
+#   3. ArgoCD reads that directory, discovers the child Application objects,
+#      and creates/syncs them in the cluster.
+#   4. Each child Application then deploys its own Helm chart (the actual service).
+#
+# Result: the entire fleet is bootstrapped with a single kubectl apply.
+# Adding a new service = add a new Application YAML to applications/dev/ and push.
+# ArgoCD picks it up automatically on the next sync.
+#
+# Hierarchy:
+#
+#   kube-demo-apps  (this file, root)
+#       ├── api-gateway-dev      → helm/api-gateway  → kube-demo-dev
+#       ├── order-service-dev    → helm/order-service → kube-demo-dev
+#       ├── notification-service-dev → ...
+#       ├── db-migrator-dev      → ...
+#       └── report-generator-dev → ...
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-demo-apps
+  namespace: argocd
+  # Finalizer ensures ArgoCD removes child Applications before deleting the root.
+  # Without it, deleting this Application would leave orphaned child Applications
+  # that continue to manage (and potentially drift) their resources.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://github.com/ashokhin/gitops.git
+    targetRevision: HEAD
+    # Points to the directory containing dev Application manifests.
+    # ArgoCD will sync every .yaml file in this directory as a Kubernetes resource.
+    path: 006_gitops/argocd/applications/dev
+  destination:
+    # Application objects are created in the argocd namespace itself,
+    # not in the target namespace of the services.
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      # prune: true — remove child Applications that no longer exist in git.
+      # Safe for dev: if you delete an Application YAML, the service is also removed.
+      prune: true
+      # selfHeal: true — revert any manual changes to the child Application objects.
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

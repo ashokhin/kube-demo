@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: report-generator-prod
+  namespace: argocd
+  annotations:
+    # Wave 3: last, after all services are up.
+    # The CronJob itself does nothing until its schedule fires —
+    # deploying it last is a convention, not a strict requirement.
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://github.com/ashokhin/gitops.git
+    targetRevision: HEAD
+    path: helm/report-generator
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-demo-prod
+  syncPolicy:
+    automated:
+      # selfHeal reverts manual kubectl changes — important for prod audit trail.
+      selfHeal: true
+      # prune: false for prod safety — do not auto-delete resources;
+      # require explicit git change + manual review before removal.
+      prune: false
+    syncOptions:
+      - CreateNamespace=true

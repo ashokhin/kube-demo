@@ -1,0 +1,30 @@
+# App of Apps — root Application for the staging environment.
+# See kube-demo-apps.yaml for a full explanation of the App of Apps pattern.
+#
+# Staging mirrors prod configuration: selfHeal is enabled so any manual kubectl
+# changes are reverted, keeping staging an accurate pre-prod test environment.
+# prune is enabled (unlike prod) because staging is not production — removing
+# a service from git should cleanly remove it from staging.
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-demo-apps-staging
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://github.com/ashokhin/gitops.git
+    targetRevision: HEAD
+    path: 006_gitops/argocd/applications/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

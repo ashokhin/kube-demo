@@ -1,0 +1,49 @@
+# Build backend: flit-core — minimal and opiniated. Designed for pure-Python
+# packages that need no compilation step. Popular for libraries and simple services.
+# flit-core supports the standard PEP 621 [project] table (since v3.x), so it
+# integrates cleanly with modern tooling (pip, uv, build).
+#
+# Limitation to be aware of: flit does not support C extensions or complex build steps.
+# If your old project has a setup.py with custom build logic, flit is not the right target.
+[build-system]
+requires = ["flit-core>=3.9"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "notification-service"
+version = "0.1.0"
+# flit-core requires description — it is mandatory, unlike hatchling/pdm-backend.
+description = "RabbitMQ consumer service for order notifications"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "aio-pika>=9.4.0",
+    "prometheus-client>=0.21.0",
+    "pydantic-settings>=2.6.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+# flit-core needs to know which module is the top-level package.
+# With a src/ layout, point it at the src directory.
+[tool.flit.module]
+name = "src"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true

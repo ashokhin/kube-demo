@@ -1,0 +1,22 @@
+# LimitRange sets default resource requests/limits for containers that don't specify them.
+# Also enforces min/max bounds to prevent unbounded resource consumption.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: kube-demo-limits
+  namespace: kube-demo-dev
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 200m
+        memory: 256Mi
+      defaultRequest:
+        cpu: 50m
+        memory: 64Mi
+      max:
+        cpu: "2"
+        memory: 2Gi
+      min:
+        cpu: 10m
+        memory: 16Mi

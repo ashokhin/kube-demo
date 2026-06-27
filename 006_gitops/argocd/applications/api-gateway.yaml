@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: api-gateway
+  namespace: argocd
+  annotations:
+    # Sync wave 2: deploy after order-service (wave 1) is healthy.
+    # ArgoCD applies resources in ascending wave order and waits for health
+    # between waves.
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://github.com/ashokhin/gitops.git
+    targetRevision: HEAD
+    path: helm/api-gateway
+    helm:
+      # Override values per environment without modifying the chart itself.
+      valueFiles:
+        - values.yaml
+        - values-prod.yaml   # environment-specific overrides (image tag, replicas)
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-demo
+  syncPolicy:
+    automated:
+      # Automatically sync when git diverges from cluster state.
+      prune: true      # delete resources removed from git
+      selfHeal: true   # revert manual kubectl changes
+    syncOptions:
+      - CreateNamespace=true

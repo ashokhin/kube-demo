@@ -1,0 +1,101 @@
+# SOURCE: helm/db-migrator/templates/job.yaml
+# GENERATED FROM:
+#   .Values.backoffLimit            → spec.backoffLimit
+#   .Values.ttlSecondsAfterFinished → spec.ttlSecondsAfterFinished
+#   .Values.image.*                 → containers[0].image + imagePullPolicy
+#   .Values.resources.*             → containers[0].resources
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# WHY JOB, NOT DEPLOYMENT?
+# ─────────────────────────────────────────────────────────────────────────────
+# Deployment: "run N replicas forever, restart on failure"
+# Job:        "run until successful completion, then stop"
+#
+# Alembic migrations are a one-shot operation:
+#   1. Connect to PostgreSQL
+#   2. Check current schema version
+#   3. Apply missing migrations in order
+#   4. Exit 0 on success, non-zero on failure
+#
+# A Deployment would restart the container after exit 0, running migrations
+# again on every restart — not what we want. A Job runs exactly once per deploy.
+# ─────────────────────────────────────────────────────────────────────────────
+# ARGOCD HOOK LIFECYCLE
+# ─────────────────────────────────────────────────────────────────────────────
+# Without hooks, ArgoCD applies all resources in parallel. This risks:
+#   - order-service starts before migrations are applied → SQL errors
+#
+# With argocd.argoproj.io/hook: PreSync:
+#   Phase 1 (PreSync) → Job runs and must complete successfully
+#   Phase 2 (Sync)    → Deployments, Services, ConfigMaps applied
+#   Phase 3 (PostSync)→ (optional) smoke tests, notifications
+#
+# argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+#   Deletes the old Job object before creating a new one.
+#   Required because Job names are immutable — if the old Job still exists,
+#   the new deploy would fail with "already exists" error.
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kube-demo-db-migrator
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: db-migrator-0.1.0
+    app.kubernetes.io/name: db-migrator
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  # How many times Kubernetes retries the pod on failure before marking the Job as failed.
+  # Each retry creates a NEW pod (not a restart of the same container).
+  # Keep this low: if migrations fail twice, something is seriously wrong.
+  backoffLimit: 2
+
+  # Delete the Job object this many seconds after it finishes (success or failure).
+  # The pod logs are already in your log aggregator long before 300s.
+  # Without this, completed Jobs accumulate and clutter "kubectl get jobs".
+  ttlSecondsAfterFinished: 300
+
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: db-migrator-0.1.0
+        app.kubernetes.io/name: db-migrator
+        app.kubernetes.io/instance: kube-demo
+        app.kubernetes.io/version: "0.1.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      # restartPolicy for Job pods:
+      #   Never    → on failure, create a new pod (up to backoffLimit times)
+      #   OnFailure → on failure, restart the SAME pod
+      #
+      # Never is correct for migrations:
+      #   - Each new pod starts fresh, reads the current schema version from DB.
+      #   - A partial migration on the previous pod may have left the DB in a
+      #     transitional state; a fresh pod will handle it correctly (Alembic is
+      #     designed to resume from the last successful migration, not re-run all).
+      #   - OnFailure might retry a pod that already partially applied a migration,
+      #     leading to "table already exists" errors.
+      restartPolicy: Never
+      containers:
+        - name: db-migrator
+          image: "ghcr.io/ashokhin/db-migrator:0.1.0"
+          imagePullPolicy: IfNotPresent
+          # The container CMD from the Dockerfile runs:
+          #   alembic --config src/alembic.ini upgrade head
+          # No command override needed here.
+          envFrom:
+            - secretRef:
+                name: kube-demo-db-migrator
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

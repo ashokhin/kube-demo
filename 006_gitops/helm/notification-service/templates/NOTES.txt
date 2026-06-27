@@ -1,0 +1,15 @@
+notification-service has been deployed to namespace {{ .Release.Namespace }}.
+
+NOTE: notification-service runs as a single replica by design — one consumer
+per queue partition. Do not scale unless you add multiple queues/partitions.
+
+Check pod status:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name=notification-service
+
+View application logs:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name=notification-service --tail=50 -f
+
+Health checks:
+  Liveness:  GET /healthz
+  Readiness: GET /readyz
+  Metrics:   GET /metrics

@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: notification-service-prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://github.com/ashokhin/gitops.git
+    targetRevision: HEAD
+    path: helm/notification-service
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-prod.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-demo-prod
+  syncPolicy:
+    automated:
+      # selfHeal reverts manual kubectl changes — important for prod audit trail.
+      selfHeal: true
+      # prune: false for prod safety — do not auto-delete resources;
+      # require explicit git change + manual review before removal.
+      prune: false
+    syncOptions:
+      - CreateNamespace=true

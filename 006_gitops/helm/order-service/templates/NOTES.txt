@@ -1,0 +1,21 @@
+order-service has been deployed to namespace {{ .Release.Namespace }}.
+
+Check pod status:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name=order-service
+
+Check init container logs (db migration):
+  kubectl logs -n {{ .Release.Namespace }} \
+    $(kubectl get pod -n {{ .Release.Namespace }} -l app.kubernetes.io/name=order-service -o name | head -1) \
+    -c migrate --previous
+
+View application logs:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name=order-service --tail=50 -f
+
+Check the metrics endpoint (from inside the cluster):
+  kubectl run tmp --rm -it --image=curlimages/curl --restart=Never -- \
+    curl http://{{ .Release.Name }}-order-service.{{ .Release.Namespace }}.svc/metrics
+
+Health checks:
+  Liveness:  GET /healthz
+  Readiness: GET /readyz
+  Metrics:   GET /metrics

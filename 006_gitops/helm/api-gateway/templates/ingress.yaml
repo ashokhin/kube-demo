@@ -1,0 +1,32 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "api-gateway.fullname" . }}
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+spec:
+  # ingressClassName selects which Ingress controller handles this resource.
+  # Common values: nginx, traefik, alb (AWS Load Balancer Controller).
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      # Secret must contain tls.crt and tls.key.
+      # In production, cert-manager creates and renews this Secret automatically.
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                # Must match the Service name defined in service.yaml.
+                name: {{ include "api-gateway.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

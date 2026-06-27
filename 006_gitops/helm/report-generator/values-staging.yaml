@@ -1,0 +1,11 @@
+# Environment-specific values for report-generator — staging environment.
+# This file is layered ON TOP of values.yaml by ArgoCD:
+#   helm.valueFiles: [values.yaml, values-staging.yaml]
+# Only values that differ from defaults are listed here.
+
+image:
+  repository: nexus.company.internal/kube-demo/report-generator
+  tag: "staging-latest"
+
+# Run daily at 06:00 UTC in staging (same cadence as prod but independent run).
+schedule: "0 6 * * *"

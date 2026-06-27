@@ -1,0 +1,19 @@
+api-gateway has been deployed to namespace {{ .Release.Namespace }}.
+
+Get the Ingress URL:
+  kubectl get ingress -n {{ .Release.Namespace }} -l app.kubernetes.io/name=api-gateway
+
+Check pod status:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name=api-gateway
+
+View application logs:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name=api-gateway --tail=50 -f
+
+Check the metrics endpoint (from inside the cluster):
+  kubectl run tmp --rm -it --image=curlimages/curl --restart=Never -- \
+    curl http://{{ .Release.Name }}-api-gateway.{{ .Release.Namespace }}.svc/metrics
+
+Health checks:
+  Liveness:  GET /healthz
+  Readiness: GET /readyz
+  Metrics:   GET /metrics

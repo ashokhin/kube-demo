@@ -1,0 +1,109 @@
+# SOURCE: helm/order-service/templates/deployment.yaml
+# Fields not explained here are identical to api-gateway/deployment.yaml.
+# See that file for the full field-by-field breakdown.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-demo-order-service
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: order-service-0.1.0
+    app.kubernetes.io/name: order-service
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  # Omitted: HPA is enabled (.Values.autoscaling.enabled=true).
+  # See api-gateway/deployment.yaml for the explanation.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: order-service
+      app.kubernetes.io/instance: kube-demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: order-service
+        app.kubernetes.io/instance: kube-demo
+      annotations:
+        checksum/config: "placeholder-sha256-recalculated-by-helm-at-render-time"
+        checksum/secret: "placeholder-sha256-recalculated-by-helm-at-render-time"
+    spec:
+      # initContainers — rendered when migrations.enabled=true in values.
+      # Shown here as a reference; omitted when the Job/PreSync approach is used instead.
+      #
+      # Pod startup sequence with init container:
+      #
+      #   [initContainer: migrate]  ──► exits 0  ──► [container: order-service starts]
+      #        │                                              │
+      #        │ golang-migrate applies                       │ /readyz returns 503
+      #        │ pending SQL files                            │ until DB is ready
+      #        ▼                                              ▼
+      #   schema_migrations table                      /readyz returns 200
+      #   updated in PostgreSQL                        pod added to Service endpoints
+      #
+      # If the init container exits non-zero (migration failed), Kubernetes restarts
+      # the entire pod. The main container never starts. This prevents a broken schema
+      # from reaching a running application.
+      initContainers:
+        - name: migrate
+          # Image built from Dockerfile.migrate in the order-service repo.
+          # Contains only: golang-migrate binary + SQL files from migrations/.
+          image: "nexus.company.internal/kube-demo/order-service-migrate:0.1.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - migrate
+            - -path
+            - /migrations    # SQL files baked into the image at this path
+            - -database
+            - $(DATABASE_URL) # standard postgresql:// DSN, not asyncpg
+            - up
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                # Read DATABASE_URL from the same Secret as the main container.
+                # The init container gets only what it needs — not RABBITMQ_URL
+                # or application config. Principle of least privilege.
+                secretKeyRef:
+                  name: kube-demo-order-service
+                  key: DATABASE_URL
+      containers:
+        - name: order-service
+          image: "ghcr.io/ashokhin/order-service:0.1.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            # Non-sensitive config: LOG_LEVEL, PORT, ORDERS_EXCHANGE
+            - configMapRef:
+                name: kube-demo-order-service
+            # Sensitive config: DATABASE_URL, RABBITMQ_URL
+            # Both blocks are merged — the pod sees all keys as env vars.
+            - secretRef:
+                name: kube-demo-order-service
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            # /readyz in order-service checks BOTH PostgreSQL and RabbitMQ.
+            # The pod is removed from Service endpoints until both connections are healthy.
+            # This prevents 500 errors during startup when DB migrations are still running.
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

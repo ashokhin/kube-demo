@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "api-gateway.fullname" . }}
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+spec:
+  # replicaCount from values.yaml is the starting point.
+  # HPA will take over and manage this field once autoscaling kicks in.
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    # matchLabels must be immutable after creation.
+    # They link the Deployment to the pods it manages.
+    matchLabels:
+      {{- include "api-gateway.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "api-gateway.selectorLabels" . | nindent 8 }}
+      annotations:
+        # This checksum annotation forces a pod rollout whenever the ConfigMap
+        # or Secret changes. Without it, pods would keep running with stale config.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "api-gateway.fullname" . }}
+      # Always pull the image on every pod start when tag is 'latest'.
+      # For versioned tags (0.1.0) IfNotPresent is fine and avoids unnecessary pulls.
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          env:
+            # envFrom loads every key from ConfigMap as an env var.
+            # The app reads ORDER_SERVICE_URL, LOG_LEVEL, PORT from here.
+          envFrom:
+            - configMapRef:
+                name: {{ include "api-gateway.fullname" . }}
+            {{- if .Values.secrets }}
+            - secretRef:
+                name: {{ include "api-gateway.fullname" . }}
+            {{- end }}
+          # Liveness: kubelet restarts the container if this fails.
+          # Use a lightweight endpoint — it must NOT depend on external services.
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          # Readiness: Kubernetes removes the pod from Service endpoints while this fails.
+          # Use it to signal "I'm not ready to take traffic yet" (e.g. upstream is down).
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          # Always set requests and limits.
+          # requests: what the scheduler uses to pick a node.
+          # limits:   hard ceiling — container is OOMKilled if it exceeds memory limit.
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      # Spread pods across availability zones and nodes to survive single-node failures.
+      # maxSkew: 1 means at most 1 extra pod on any domain vs. the least-loaded domain.
+      # labelSelector is automatically set to match this Deployment's pods.
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "api-gateway.selectorLabels" . | nindent 14 }}
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "api-gateway.selectorLabels" . | nindent 14 }}
+      {{- end }}

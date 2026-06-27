@@ -1,0 +1,84 @@
+# SOURCE: helm/notification-service/templates/deployment.yaml
+# UNIQUE TO THIS SERVICE: terminationGracePeriodSeconds
+#
+# notification-service is a long-running RabbitMQ consumer.
+# When Kubernetes wants to remove a pod (rolling update, scale-down, node drain),
+# it sends SIGTERM and then waits terminationGracePeriodSeconds before sending SIGKILL.
+#
+# The consumer's graceful shutdown flow (src/consumer.py):
+#   1. Receives SIGTERM → sets _should_stop Event
+#   2. Finishes processing the current message
+#   3. Stops accepting new messages from the queue
+#   4. Closes the RabbitMQ connection
+#   5. Process exits cleanly
+#
+# If terminationGracePeriodSeconds is too short, SIGKILL arrives mid-processing
+# → the message is nacked and goes back to the queue (depending on ack mode) or is lost.
+# Set this to at least 2× your slowest expected message processing time.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-demo-notification-service
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: notification-service-0.1.0
+    app.kubernetes.io/name: notification-service
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  # Single replica: one consumer per queue.
+  # Scaling consumers requires either multiple queues or a competing-consumers pattern
+  # with careful idempotency guarantees. For this demo, 1 is the safe default.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notification-service
+      app.kubernetes.io/instance: kube-demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notification-service
+        app.kubernetes.io/instance: kube-demo
+      annotations:
+        checksum/config: "placeholder-sha256-recalculated-by-helm-at-render-time"
+        checksum/secret: "placeholder-sha256-recalculated-by-helm-at-render-time"
+    spec:
+      # Source: .Values.terminationGracePeriodSeconds (60)
+      # Default in Kubernetes is 30s — not enough for slow message processors.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: notification-service
+          image: "ghcr.io/ashokhin/notification-service:0.1.0"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: kube-demo-notification-service
+            - secretRef:
+                name: kube-demo-notification-service
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

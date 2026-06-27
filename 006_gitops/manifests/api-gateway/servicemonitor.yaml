@@ -1,0 +1,48 @@
+# SOURCE: helm/api-gateway/templates/servicemonitor.yaml
+# GENERATED FROM:
+#   .Values.serviceMonitor.enabled  → {{- if .Values.serviceMonitor.enabled }} guard
+#   .Values.serviceMonitor.path     → endpoints[0].path
+#   .Values.serviceMonitor.interval → endpoints[0].interval
+#
+# ServiceMonitor is a Custom Resource Definition (CRD) provided by Prometheus Operator.
+# It declaratively tells Prometheus which Services to scrape, instead of editing
+# prometheus.yml by hand.
+#
+# How it works:
+#   1. Prometheus Operator watches ServiceMonitor objects.
+#   2. It finds the matching Service via spec.selector.matchLabels.
+#   3. It discovers pod IPs behind the Service.
+#   4. It adds scrape targets to Prometheus config automatically.
+#
+# Without Prometheus Operator you would add this to prometheus.yml instead:
+#   scrape_configs:
+#     - job_name: api-gateway
+#       kubernetes_sd_configs: [...]
+#       relabel_configs: [...]
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kube-demo-api-gateway
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: api-gateway-0.1.0
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    # This label must match Prometheus Operator's serviceMonitorSelector.
+    # Check: kubectl get prometheus -n monitoring -o yaml | grep serviceMonitorSelector
+    # kube-prometheus-stack default: release: <helm-release-name>
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      # Prometheus discovers Services with these labels.
+      # Must match Service spec.selector (i.e. selectorLabels from _helpers.tpl).
+      app.kubernetes.io/name: api-gateway
+      app.kubernetes.io/instance: kube-demo
+  endpoints:
+    - port: http      # Must match Service spec.ports[0].name
+      path: /metrics  # The endpoint that returns Prometheus text format
+      interval: 30s   # How often Prometheus scrapes this target

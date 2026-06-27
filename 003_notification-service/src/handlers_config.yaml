@@ -1,0 +1,51 @@
+# Notification routing rules.
+#
+# Each event_type key maps to a list of channels to notify.
+# Channels are executed in order — useful when email must go before push.
+#
+# This file is mounted from a Kubernetes ConfigMap at /app/config/handlers.yaml.
+# Changing the ConfigMap (e.g. adding a channel) does NOT require rebuilding
+# the Docker image — only a pod restart or a live reload.
+#
+# channel types:
+#   email  — transactional email via SMTP / SendGrid
+#   push   — mobile push notification via FCM / APNs
+#   sms    — SMS via Twilio or similar
+#   log    — structured log only (useful for dev / unknown events)
+
+handlers:
+  order.created:
+    - type: email
+      template: order_confirmation
+      retry: 3
+    - type: push
+      template: order_created_push
+      retry: 1
+
+  order.confirmed:
+    - type: email
+      template: order_confirmed
+      retry: 3
+    - type: push
+      template: order_confirmed_push
+      retry: 1
+
+  order.cancelled:
+    - type: email
+      template: order_cancellation
+      retry: 3
+
+  order.shipped:
+    - type: email
+      template: order_shipped
+      retry: 3
+    - type: sms
+      template: order_shipped_sms
+      retry: 2
+
+# Fallback for event types not listed above.
+# "log" records the event without sending any notification.
+# This prevents unknown events from blocking the queue.
+default:
+  - type: log
+    level: warning

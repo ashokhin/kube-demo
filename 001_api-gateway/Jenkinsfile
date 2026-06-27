@@ -1,0 +1,272 @@
+// Pipeline for api-gateway.
+//
+// Stages:
+//   Checkout → Lint → Test → Build → Push → Promote to Dev
+//
+// "Deploy" means: update the image tag in the gitops repository.
+// ArgoCD detects the change and applies it to the cluster — Jenkins never
+// runs kubectl or helm directly. This is the GitOps contract:
+//   CI  = build + test + push image + update gitops repo
+//   CD  = ArgoCD watches gitops repo and syncs to cluster
+//
+// Promote to staging and prod is done via separate manual steps (see below).
+//
+// Required Jenkins credentials (Manage Jenkins → Credentials):
+//   nexus-credentials   — username/password for Nexus Docker registry
+//   gitops-ssh-key      — SSH key with write access to the gitops repository
+//
+// Required Jenkins plugins:
+//   Pipeline, Docker Pipeline, Git, Credentials Binding, Blue Ocean (optional)
+
+pipeline {
+    agent any
+
+    environment {
+        // Service name — used in image name and gitops path.
+        SERVICE       = "api-gateway"
+        // Nexus registry host configured by the infrastructure team.
+        REGISTRY      = "nexus.company.internal"
+        IMAGE         = "${REGISTRY}/kube-demo/${SERVICE}"
+        // Gitops repository contains Helm charts and values files.
+        GITOPS_REPO   = "git@bitbucket.company.internal:devops/gitops.git"
+        GITOPS_BRANCH = "main"
+    }
+
+    stages {
+
+        stage("Checkout") {
+            steps {
+                // Clean workspace before checkout so stale files don't affect tests.
+                cleanWs()
+                checkout scm
+                script {
+                    // Build a deterministic image tag from branch name + short commit SHA.
+                    // Format: <branch>-<sha7>  e.g. "main-a1b2c3d"
+                    // This makes every image traceable back to a specific commit.
+                    env.GIT_BRANCH_SLUG = sh(
+                        script: "git rev-parse --abbrev-ref HEAD | tr '/' '-'",
+                        returnStdout: true
+                    ).trim()
+                    env.GIT_SHA_SHORT = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    ).trim()
+                    env.IMAGE_TAG = "${env.GIT_BRANCH_SLUG}-${env.GIT_SHA_SHORT}"
+                    echo "Image tag: ${env.IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage("Lint") {
+            steps {
+                // ruff checks code style and obvious errors without running the code.
+                // Runs inside a throw-away Docker container — no Python installation
+                // required on the Jenkins agent.
+                sh """
+                    docker run --rm \
+                        -v \${PWD}:/src -w /src \
+                        ghcr.io/astral-sh/ruff:latest \
+                        check src/
+                """
+                // hadolint lints the Dockerfile for common mistakes and best practices.
+                // Runs in a throw-away container — no installation required on the agent.
+                sh """
+                    docker run --rm \
+                        -v \${PWD}/Dockerfile:/Dockerfile \
+                        hadolint/hadolint:latest \
+                        hadolint /Dockerfile
+                """
+            }
+        }
+
+        stage("Test") {
+            steps {
+                // Run pytest inside the same image that will be built for production.
+                // This ensures tests run against the exact same Python version and
+                // base OS packages as the runtime container.
+                //
+                // --build-arg INSTALL_DEV=true installs dev dependencies (pytest, respx)
+                // in addition to runtime dependencies.
+                sh """
+                    docker build \
+                        --target builder \
+                        --tag ${IMAGE}:test-${env.GIT_SHA_SHORT} \
+                        .
+
+                    docker run --rm \
+                        ${IMAGE}:test-${env.GIT_SHA_SHORT} \
+                        sh -c "pip install --no-cache-dir pytest pytest-asyncio respx && \
+                               pytest tests/ -v --tb=short"
+
+                    docker rmi ${IMAGE}:test-${env.GIT_SHA_SHORT} || true
+                """
+            }
+            post {
+                always {
+                    // Publish test results to Jenkins UI if junit XML is generated.
+                    // Add --junitxml=test-results.xml to pytest args to enable this.
+                    junit allowEmptyResults: true, testResults: "test-results.xml"
+                }
+            }
+        }
+
+        stage("Build") {
+            steps {
+                sh """
+                    docker build \
+                        --tag ${IMAGE}:${env.IMAGE_TAG} \
+                        --tag ${IMAGE}:latest \
+                        .
+                """
+            }
+        }
+
+        // Security scan runs on the locally built image — before push to Nexus.
+        // Vulnerable images never reach the registry or the cluster.
+        stage("Scan") {
+            steps {
+                // --exit-code 1 fails the build on CRITICAL/HIGH vulnerabilities with an available fix.
+                // --ignore-unfixed skips issues that have no patch yet (no actionable fix).
+                sh """
+                    docker run --rm \
+                        aquasec/trivy:latest image \
+                        --exit-code 1 \
+                        --severity HIGH,CRITICAL \
+                        --ignore-unfixed \
+                        ${IMAGE}:${env.IMAGE_TAG}
+                """
+            }
+        }
+
+        stage("Push") {
+            steps {
+                // Credentials are stored in Jenkins Credential Store, never in code.
+                // withCredentials injects them as env vars for the duration of this block.
+                withCredentials([usernamePassword(
+                    credentialsId: "nexus-credentials",
+                    usernameVariable: "NEXUS_USER",
+                    passwordVariable: "NEXUS_PASS"
+                )]) {
+                    sh """
+                        echo "\${NEXUS_PASS}" | docker login ${REGISTRY} \
+                            -u "\${NEXUS_USER}" --password-stdin
+                        docker push ${IMAGE}:${env.IMAGE_TAG}
+                        docker push ${IMAGE}:latest
+                        docker logout ${REGISTRY}
+                    """
+                }
+            }
+        }
+
+        stage("Promote to Dev") {
+            // This stage runs only on the main branch.
+            // Feature branches build and test but do not deploy.
+            when {
+                branch "main"
+            }
+            steps {
+                // Update the image tag in the gitops repository.
+                // ArgoCD watches this repo and will automatically sync the new tag
+                // to the kube-demo-dev namespace within ~3 minutes (default poll interval).
+                //
+                // We do NOT run `helm upgrade` or `kubectl apply` here.
+                // Jenkins only owns the image — ArgoCD owns the cluster state.
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: "gitops-ssh-key",
+                    keyFileVariable: "SSH_KEY"
+                )]) {
+                    sh """
+                        export GIT_SSH_COMMAND="ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no"
+
+                        git clone ${GITOPS_REPO} gitops-repo
+                        cd gitops-repo
+
+                        # Validate the Helm chart before patching the image tag.
+                        # Catches template errors early — before ArgoCD tries to apply them.
+                        helm lint gitops-repo/helm/${SERVICE}/
+
+                        # Patch image.tag in values-dev.yaml using yq.
+                        # yq is a YAML-aware tool — safer than sed for structured files.
+                        yq e '.image.tag = "${env.IMAGE_TAG}"' -i \
+                            helm/${SERVICE}/values-dev.yaml
+
+                        git config user.email "jenkins@company.internal"
+                        git config user.name  "Jenkins"
+                        git add helm/${SERVICE}/values-dev.yaml
+                        # Commit message follows Conventional Commits (https://www.conventionalcommits.org):
+                        #   <type>(<scope>): <description>
+                        # "ci" type = changes to CI/CD scripts and configuration.
+                        git commit -m "ci(${SERVICE}): promote ${env.IMAGE_TAG} to dev"
+                        git push origin ${GITOPS_BRANCH}
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo """
+            ✓ Build succeeded: ${IMAGE}:${env.IMAGE_TAG}
+
+            Next steps:
+              dev     → ArgoCD auto-syncs within ~3 minutes (watch: argocd app get api-gateway-dev)
+              staging → Run the 'Promote to Staging' job after dev validation
+              prod    → Open a PR in the gitops repo updating helm/${SERVICE}/values-prod.yaml
+            """
+        }
+        failure {
+            // In a real pipeline: send a Slack/Teams notification here.
+            echo "Build failed. Check the logs above."
+        }
+        always {
+            // Clean up local Docker images to prevent disk exhaustion on the agent.
+            sh "docker rmi ${IMAGE}:${env.IMAGE_TAG} ${IMAGE}:latest || true"
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// PROMOTE TO STAGING — separate Jenkins job or manual pipeline
+// ---------------------------------------------------------------------------
+//
+// After the team validates the build in dev, a separate job promotes it:
+//
+//   pipeline {
+//       parameters {
+//           string(name: "IMAGE_TAG", description: "Tag to promote (e.g. main-a1b2c3d)")
+//       }
+//       stages {
+//           stage("Promote to Staging") {
+//               steps {
+//                   withCredentials([sshUserPrivateKey(credentialsId: "gitops-ssh-key", ...)]) {
+//                       sh """
+//                           git clone ${GITOPS_REPO} gitops-repo && cd gitops-repo
+//                           yq e '.image.tag = "${params.IMAGE_TAG}"' -i helm/api-gateway/values-staging.yaml
+//                           git commit -am "ci(api-gateway): promote ${params.IMAGE_TAG} to staging"
+//                           git push origin main
+//                       """
+//                   }
+//               }
+//           }
+//       }
+//   }
+//
+// ---------------------------------------------------------------------------
+// PROMOTE TO PROD — GitOps pull request flow
+// ---------------------------------------------------------------------------
+//
+// Production promotion is intentionally NOT automated. The process:
+//
+//   1. Engineer opens a PR in the gitops repo:
+//        helm/api-gateway/values-prod.yaml
+//        - image.tag: "main-a1b2c3d"   ← change this line
+//
+//   2. PR is reviewed and approved by a second engineer.
+//
+//   3. PR is merged to main.
+//
+//   4. ArgoCD detects the change and syncs to kube-demo-prod namespace.
+//      (or: ArgoCD is set to manual sync for prod — engineer clicks "Sync" in UI)
+//
+// This gives a full audit trail: who promoted what, when, and who approved it.

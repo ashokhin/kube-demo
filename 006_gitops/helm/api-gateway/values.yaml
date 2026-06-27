@@ -1,0 +1,116 @@
+# Default values for api-gateway.
+# Override per environment via: helm install -f values-prod.yaml
+
+image:
+  repository: ghcr.io/ashokhin/api-gateway
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# Number of pod replicas. HPA will override this at runtime.
+replicaCount: 2
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: true
+  className: nginx
+  host: api.kube-demo.local
+  tls:
+    enabled: false
+    secretName: api-gateway-tls
+
+# Non-sensitive configuration → goes into ConfigMap → mounted as env vars
+config:
+  LOG_LEVEL: "INFO"
+  ORDER_SERVICE_URL: "http://order-service:80"
+  PORT: "8080"
+
+# Sensitive configuration → goes into Secret → mounted as env vars.
+# In production replace with External Secrets or Sealed Secrets.
+secrets: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# Liveness: is the process alive? Restart if it fails.
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  failureThreshold: 3
+
+# Readiness: is the pod ready to receive traffic?
+# Kubernetes removes the pod from Service endpoints while this fails.
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+# Prometheus Operator ServiceMonitor
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  path: /metrics
+
+podAnnotations: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# topologySpreadConstraints distributes pods evenly across failure domains
+# (nodes, availability zones). Without this, the scheduler may place all replicas
+# on the same node — a single node failure would take down the entire service.
+#
+# enabled: true  — two rules applied: spread across zones, then across nodes.
+# maxSkew: 1     — allow at most 1 extra pod on any domain compared to others.
+# whenUnsatisfiable: DoNotSchedule — hard constraint (use ScheduleAnyway in dev).
+#
+# labelSelector is injected automatically in deployment.yaml using selectorLabels.
+topologySpreadConstraints:
+  enabled: true
+  maxSkew: 1
+  whenUnsatisfiable: DoNotSchedule
+
+# NetworkPolicy controls whether a NetworkPolicy resource is created for this service.
+# When enabled, restricts ingress/egress traffic to only what is needed.
+networkPolicy:
+  enabled: true
+
+# PodDisruptionBudget ensures at least 1 pod is always available during voluntary
+# disruptions (e.g. kubectl drain, rolling updates). Without a PDB, all pods could
+# be evicted simultaneously leaving the api-gateway unavailable.
+podDisruptionBudget:
+  enabled: true
+
+# Each service runs under its own ServiceAccount with no mounted token.
+# This follows the principle of least privilege — pods cannot call the Kubernetes
+# API unless explicitly granted RBAC permissions (none needed for these services).
+serviceAccount:
+  create: true
+  annotations: {}
+
+# When true, secrets are managed by External Secrets Operator (ESO) reading from Vault.
+# The Helm-managed Secret template is disabled — ESO creates the Secret instead.
+# Set to false for local development (docker-compose) or clusters without ESO installed.
+externalSecrets:
+  enabled: false

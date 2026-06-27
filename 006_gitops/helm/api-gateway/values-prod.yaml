@@ -1,0 +1,18 @@
+# Environment-specific values for api-gateway — prod environment.
+# This file is layered ON TOP of values.yaml by ArgoCD:
+#   helm.valueFiles: [values.yaml, values-prod.yaml]
+# Only values that differ from defaults are listed here.
+
+image:
+  repository: nexus.company.internal/kube-demo/api-gateway
+  tag: "1.0.0"
+
+replicaCount: 2
+
+ingress:
+  host: "api.kube-demo.example.com"
+  tls:
+    enabled: true
+
+autoscaling:
+  enabled: true

@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: kube-demo
+  namespace: argocd
+spec:
+  description: kube-demo microservices project
+
+  # Which git repositories ArgoCD may pull from for this project.
+  sourceRepos:
+    - "https://github.com/ashokhin/gitops.git"
+
+  # Which clusters and namespaces ArgoCD may deploy to.
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: kube-demo
+    - server: https://kubernetes.default.svc
+      namespace: kube-demo-dev
+    - server: https://kubernetes.default.svc
+      namespace: kube-demo-staging
+    - server: https://kubernetes.default.svc
+      namespace: kube-demo-prod
+
+  # Prevent accidental deployment to cluster-wide resources.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

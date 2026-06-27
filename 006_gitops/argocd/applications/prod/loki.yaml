@@ -1,0 +1,103 @@
+# Grafana Loki — log aggregation backend for production environment.
+# Differences from dev/staging:
+#   - deploymentMode: SimpleScalable — separate read, write, and backend components
+#     for independent scaling and rolling upgrades without downtime
+#   - replication_factor: 3 — high availability, survives one node failure
+#   - storage: S3 — durable object storage (not local filesystem)
+#   - Higher resource requests to handle production log volume
+#   - Larger persistence volume per component
+#
+# Logs flow: Grafana Alloy (DaemonSet) → Loki → Grafana (LogQL queries)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki-prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"   # deploy before services, same wave as monitoring
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: "6.x"
+    helm:
+      releaseName: loki
+      values: |
+        loki:
+          auth_enabled: false
+          commonConfig:
+            replication_factor: 3   # prod: HA — survives one node failure
+          storage:
+            type: s3
+            s3:
+              endpoint: s3.amazonaws.com      # replace with your S3-compatible endpoint
+              region: us-east-1               # replace with your region
+              bucketnames: loki-chunks-prod   # replace with your bucket name
+              access_key_id: ""               # use IAM role or ExternalSecret
+              secret_access_key: ""           # use IAM role or ExternalSecret
+              s3forcepathstyle: false
+          schemaConfig:
+            configs:
+              - from: "2024-01-01"
+                store: tsdb
+                object_store: s3
+                schema: v13
+                index:
+                  prefix: loki_index_
+                  period: 24h
+
+        deploymentMode: SimpleScalable   # prod: separate read/write/backend for HA
+
+        read:
+          replicas: 2
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          persistence:
+            enabled: true
+            size: 50Gi
+
+        write:
+          replicas: 3   # matches replication_factor
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          persistence:
+            enabled: true
+            size: 50Gi
+
+        backend:
+          replicas: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          persistence:
+            enabled: true
+            size: 50Gi
+
+        grafana-agent:
+          enabled: false   # we use Alloy instead
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-monitoring
+  syncPolicy:
+    automated:
+      selfHeal: true
+      # prune: false for prod safety — do not auto-delete logging resources;
+      # require explicit git change + review before removal.
+      prune: false
+    syncOptions:
+      - CreateNamespace=true

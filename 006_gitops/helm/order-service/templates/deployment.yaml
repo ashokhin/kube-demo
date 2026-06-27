@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "order-service.fullname" . }}
+  labels:
+    {{- include "order-service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "order-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "order-service.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "order-service.fullname" . }}
+      {{- if .Values.migrations.enabled }}
+      # initContainers run sequentially before any container in `containers:`.
+      # Kubernetes does not start the main container until all init containers
+      # exit with code 0. If an init container fails, the pod restarts and
+      # retries from the failed init container.
+      #
+      # This guarantees the database schema is up to date before the application
+      # starts accepting requests — without any external orchestration (no ArgoCD
+      # sync waves, no separate Job coordination).
+      initContainers:
+        - name: migrate
+          image: "{{ .Values.migrations.image.repository }}:{{ .Values.migrations.image.tag }}"
+          imagePullPolicy: {{ .Values.migrations.image.pullPolicy }}
+          command:
+            - migrate
+            - -path
+            - /migrations
+            - -database
+            # MIGRATE_DATABASE_URL uses the standard postgresql:// DSN.
+            # The application uses postgresql+asyncpg:// (SQLAlchemy async driver),
+            # but golang-migrate does not understand the +asyncpg dialect suffix.
+            # Both point to the same PostgreSQL instance — only the driver differs.
+            - $(MIGRATE_DATABASE_URL)
+            - up
+          # Inject only what the migration container needs — not RABBITMQ_URL
+          # or application config. Principle of least privilege.
+          env:
+            - name: MIGRATE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "order-service.fullname" . }}
+                  key: MIGRATE_DATABASE_URL
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "order-service.fullname" . }}
+            {{- if .Values.secrets }}
+            - secretRef:
+                name: {{ include "order-service.fullname" . }}
+            {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      # Spread pods across availability zones and nodes to survive single-node failures.
+      # maxSkew: 1 means at most 1 extra pod on any domain vs. the least-loaded domain.
+      # labelSelector is automatically set to match this Deployment's pods.
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "order-service.selectorLabels" . | nindent 14 }}
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "order-service.selectorLabels" . | nindent 14 }}
+      {{- end }}

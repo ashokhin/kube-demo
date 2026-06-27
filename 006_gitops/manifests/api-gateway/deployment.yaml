@@ -1,0 +1,123 @@
+# SOURCE: helm/api-gateway/templates/deployment.yaml
+# GENERATED FROM:
+#   .Values.image.*          → spec.template.spec.containers[0].image + imagePullPolicy
+#   .Values.replicaCount     → spec.replicas  (omitted here because HPA is enabled)
+#   .Values.config / secrets → envFrom refs (ConfigMap + Secret names)
+#   .Values.resources.*      → containers[0].resources
+#   .Values.livenessProbe.*  → containers[0].livenessProbe
+#   .Values.readinessProbe.* → containers[0].readinessProbe
+#   _helpers.tpl             → metadata.name, labels, selector
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-demo-api-gateway
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: api-gateway-0.1.0
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  # replicas is OMITTED intentionally.
+  # When HPA is enabled (.Values.autoscaling.enabled=true), the Helm template
+  # skips this field: {{- if not .Values.autoscaling.enabled }} replicas: … {{- end }}
+  #
+  # If you set replicas here AND have an HPA, kubectl will keep fighting the HPA:
+  #   - HPA sets replicas=3 based on CPU
+  #   - Next "kubectl apply" resets it back to 2
+  # Solution: let HPA own the replicas field entirely.
+
+  selector:
+    # matchLabels links this Deployment to the pods it manages (via ReplicaSet).
+    # These labels MUST be stable — changing them after first deploy requires
+    # deleting and recreating the Deployment (ReplicaSet selector is immutable).
+    # Source: _helpers.tpl → "api-gateway.selectorLabels"
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+      app.kubernetes.io/instance: kube-demo
+
+  template:
+    metadata:
+      labels:
+        # Pod labels — same as selectorLabels. Service uses these to find pods.
+        app.kubernetes.io/name: api-gateway
+        app.kubernetes.io/instance: kube-demo
+      annotations:
+        # The checksum changes whenever ConfigMap or Secret content changes.
+        # A changed annotation → changed pod template hash → Deployment triggers a
+        # rolling update → pods restart with the new environment variables.
+        # Without this, pods would keep running with the old config after a ConfigMap update.
+        # Source: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/config: "placeholder-sha256-recalculated-by-helm-at-render-time"
+        checksum/secret: "placeholder-sha256-recalculated-by-helm-at-render-time"
+
+    spec:
+      containers:
+        - name: api-gateway
+          # Source: .Values.image.repository + ":" + .Values.image.tag
+          image: "ghcr.io/ashokhin/api-gateway:0.1.0"
+
+          # IfNotPresent: use the locally cached image if it exists.
+          # Always: pull on every pod start — use for 'latest' tag only.
+          # Never: never pull — image must exist on the node already.
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              # Source: .Values.service.targetPort
+              # Must match the port the application listens on (uvicorn --port 8080).
+              containerPort: 8080
+              protocol: TCP
+
+          envFrom:
+            # Load every key from the ConfigMap as an env var.
+            # ORDER_SERVICE_URL, LOG_LEVEL, PORT become available to the process.
+            - configMapRef:
+                # Must match ConfigMap metadata.name exactly.
+                name: kube-demo-api-gateway
+            # secretRef is rendered only when .Values.secrets is non-empty.
+            # - secretRef:
+            #     name: kube-demo-api-gateway
+
+          livenessProbe:
+            # Liveness: "is this container alive?"
+            # kubelet RESTARTS the container if this probe fails failureThreshold times.
+            # Rule: only check internal process health — never depend on external services.
+            # If the DB is down, liveness should still pass (that's readiness job).
+            httpGet:
+              path: /healthz
+              port: 8080
+            # Wait this long after container start before the first check.
+            # Prevents premature restarts during slow startup.
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+
+          readinessProbe:
+            # Readiness: "is this container ready to receive traffic?"
+            # Kubernetes REMOVES the pod from Service endpoints while this fails.
+            # Traffic stops flowing to the pod — no 502 errors during restarts.
+            # Rule: check everything the pod needs to serve requests (upstream services, DB).
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+          resources:
+            requests:
+              # requests: minimum resources guaranteed by the scheduler.
+              # The scheduler picks a node that has at least this much free.
+              # Setting too low → pod lands on an overloaded node.
+              cpu: 100m    # 100 millicores = 0.1 CPU core
+              memory: 128Mi
+            limits:
+              # limits: hard ceiling.
+              # CPU limit  → process is throttled (slowed down), not killed.
+              # Memory limit → container is OOMKilled immediately.
+              # Setting limits = requests is a safe starting point for production.
+              cpu: 500m
+              memory: 256Mi

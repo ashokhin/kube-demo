@@ -1,0 +1,65 @@
+# kube-prometheus-stack for staging environment.
+# Same as dev but with production-like Alertmanager configuration.
+#
+# IMPORTANT: install this Application BEFORE the service Applications.
+# ServiceMonitor CRDs must exist before ArgoCD applies service Helm charts.
+# Use sync wave -1 to ensure ordering.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-staging
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"   # deploy before all services
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: "58.x"
+    helm:
+      releaseName: monitoring
+      values: |
+        grafana:
+          enabled: true
+          adminPassword: CHANGEME
+          ingress:
+            enabled: false
+          persistence:
+            enabled: false   # staging: no persistence needed
+
+        prometheus:
+          prometheusSpec:
+            scrapeInterval: 30s
+            retention: 7d
+            # Pick up ServiceMonitors from all namespaces (kube-demo-staging, etc.)
+            serviceMonitorNamespaceSelector: {}
+            serviceMonitorSelector: {}
+
+        # Alertmanager enabled in staging — test alert routing before prod
+        alertmanager:
+          enabled: true
+          alertmanagerSpec:
+            replicas: 1
+
+        prometheus-node-exporter:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+
+        kube-state-metrics:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # required for kube-prometheus-stack CRDs

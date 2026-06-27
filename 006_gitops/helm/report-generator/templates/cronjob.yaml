@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "report-generator.fullname" . }}
+  labels:
+    {{- include "report-generator.labels" . | nindent 4 }}
+spec:
+  # Standard Unix cron syntax (UTC timezone).
+  # "0 6 * * *" = every day at 06:00 UTC.
+  schedule: {{ .Values.schedule | quote }}
+  #
+  # concurrencyPolicy controls what happens if a Job is still running
+  # when the next scheduled time arrives:
+  #   Allow  – start a new Job anyway (risk: two jobs write the same report)
+  #   Forbid – skip the new run (safe for reports, avoids duplicate output)
+  #   Replace – cancel the running Job and start a new one
+  concurrencyPolicy: {{ .Values.concurrencyPolicy }}
+  #
+  # If the cluster was unavailable and missed the scheduled time,
+  # only start the job if it's less than startingDeadlineSeconds late.
+  # Prevents a flood of catch-up jobs after a cluster outage.
+  startingDeadlineSeconds: {{ .Values.startingDeadlineSeconds }}
+  # Keep last 3 successful and 1 failed Job objects for debugging.
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.backoffLimit }}
+      ttlSecondsAfterFinished: {{ .Values.ttlSecondsAfterFinished }}
+      template:
+        metadata:
+          labels:
+            {{- include "report-generator.labels" . | nindent 12 }}
+        spec:
+          serviceAccountName: {{ include "report-generator.fullname" . }}
+          restartPolicy: Never
+          containers:
+            - name: {{ .Chart.Name }}
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "report-generator.fullname" . }}
+                {{- if .Values.secrets }}
+                - secretRef:
+                    name: {{ include "report-generator.fullname" . }}
+                {{- end }}
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+              {{- if .Values.reportVolume.enabled }}
+              volumeMounts:
+                - name: reports
+                  mountPath: {{ .Values.config.REPORT_OUTPUT_PATH }}
+              {{- end }}
+          {{- if .Values.reportVolume.enabled }}
+          volumes:
+            - name: reports
+              persistentVolumeClaim:
+                claimName: {{ .Values.reportVolume.claimName }}
+          {{- end }}

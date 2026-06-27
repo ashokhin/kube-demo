@@ -1,0 +1,74 @@
+# kube-prometheus-stack installs:
+#   - Prometheus Operator (manages Prometheus, Alertmanager, PrometheusRule, ServiceMonitor CRDs)
+#   - Prometheus (metrics storage and query engine)
+#   - Alertmanager (alert routing and silencing)
+#   - Grafana (visualization dashboards)
+#   - kube-state-metrics (cluster-level metrics: pod status, deployment replicas, etc.)
+#   - node-exporter (node-level metrics: CPU, memory, disk)
+#
+# IMPORTANT: install this Application BEFORE the service Applications.
+# ServiceMonitor CRDs must exist before ArgoCD applies service Helm charts.
+# Use sync wave -1 to ensure ordering.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"   # deploy before all services
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: "58.x"
+    helm:
+      releaseName: monitoring
+      values: |
+        # Grafana — expose via port-forward in dev, Ingress in prod
+        grafana:
+          enabled: true
+          adminPassword: CHANGEME
+          ingress:
+            enabled: false
+          persistence:
+            enabled: false   # dev: no persistence needed
+
+        # Prometheus — scrape interval and retention
+        prometheus:
+          prometheusSpec:
+            scrapeInterval: 30s
+            retention: 7d
+            # IMPORTANT: without this, Prometheus only picks up ServiceMonitors
+            # in the same namespace. Setting to empty string picks up ALL namespaces.
+            serviceMonitorNamespaceSelector: {}
+            serviceMonitorSelector: {}
+
+        # Alertmanager — enabled in dev for testing alert rules
+        alertmanager:
+          enabled: true
+          alertmanagerSpec:
+            replicas: 1
+
+        # Reduce resource usage in dev
+        prometheus-node-exporter:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+
+        kube-state-metrics:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # required for kube-prometheus-stack CRDs

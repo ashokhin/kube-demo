@@ -1,0 +1,109 @@
+# PrometheusRule is a CRD provided by Prometheus Operator.
+# Rules defined here are automatically loaded by Prometheus — no restart needed.
+#
+# Alert severity levels used in this project:
+#   critical — service is down or SLA-breaking, page immediately
+#   warning  — degraded performance, investigate soon
+#   info     — notable event, no immediate action required
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kube-demo-alerts
+  namespace: kube-monitoring
+  labels:
+    # These labels must match Prometheus Operator's ruleSelector.
+    # kube-prometheus-stack sets: release=monitoring by default.
+    release: monitoring
+spec:
+  groups:
+    - name: kube-demo.availability
+      rules:
+        - alert: ServiceDown
+          expr: up{job=~"kube-demo.*"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.job }} is down"
+            description: "Prometheus cannot scrape {{ $labels.job }} in namespace {{ $labels.namespace }}. Pod may be crashlooping or the /metrics endpoint is unreachable."
+
+        - alert: HighErrorRate
+          expr: |
+            rate(order_service_requests_total{status_code=~"5.."}[5m])
+            /
+            rate(order_service_requests_total[5m]) > 0.05
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "High error rate on order-service"
+            description: "More than 5% of requests to order-service are returning 5xx errors. Current rate: {{ $value | humanizePercentage }}."
+
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95,
+              rate(order_service_request_duration_seconds_bucket[5m])
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High p95 latency on order-service"
+            description: "95th percentile request duration is above 2 seconds. Current p95: {{ $value | humanizeDuration }}."
+
+    - name: kube-demo.queue
+      rules:
+        - alert: EventPublishingFailing
+          expr: |
+            rate(order_service_events_published_total[5m]) == 0
+              and
+            rate(order_service_orders_created_total[5m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "order-service is creating orders but not publishing events"
+            description: "Orders are being created but no events are published to RabbitMQ. notification-service will not receive updates. Check RabbitMQ connectivity."
+
+    - name: kube-demo.kubernetes
+      rules:
+        - alert: PodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace=~"kube-demo-.*"}[15m]) * 60 * 15 > 3
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.pod }} is crash looping"
+            description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted {{ $value }} times in the last 15 minutes."
+
+        - alert: PodNotReady
+          expr: |
+            kube_pod_status_ready{condition="true", namespace=~"kube-demo-.*"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.pod }} is not ready"
+            description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been in a non-ready state for more than 5 minutes."
+
+        - alert: CronJobFailed
+          expr: |
+            kube_job_status_failed{namespace=~"kube-demo-.*"} > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Job {{ $labels.job_name }} failed"
+            description: "Job {{ $labels.job_name }} in namespace {{ $labels.namespace }} has failed. Check report-generator or db-migrator logs."
+
+        - alert: PersistentVolumeFillingUp
+          expr: |
+            (kubelet_volume_stats_available_bytes{namespace=~"kube-demo-.*"}
+            / kubelet_volume_stats_capacity_bytes{namespace=~"kube-demo-.*"}) < 0.15
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC {{ $labels.persistentvolumeclaim }} is filling up"
+            description: "PVC {{ $labels.persistentvolumeclaim }} in namespace {{ $labels.namespace }} has less than 15% free space. report-generator output volume may be full."

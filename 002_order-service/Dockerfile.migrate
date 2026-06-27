@@ -1,0 +1,21 @@
+# Dockerfile.migrate — builds the database migration init container image.
+#
+# This image contains only two things:
+#   1. the golang-migrate binary
+#   2. the SQL migration files
+#
+# It is built and pushed alongside the application image in CI (same Jenkinsfile stage).
+# The image tag is kept in sync with the application image tag so both are promoted together.
+#
+# Usage in Kubernetes (see Helm chart values — migrations.enabled):
+#   initContainers:
+#     - name: migrate
+#       image: nexus.company.internal/kube-demo/order-service-migrate:<tag>
+#       command: ["migrate", "-path", "/migrations", "-database", "$(DATABASE_URL)", "up"]
+
+# golang-migrate publishes an official minimal image with the binary only.
+# We use it as the base and add our SQL files on top.
+FROM migrate/migrate:v4.17.0
+
+# Copy SQL migration files into the well-known path expected by golang-migrate.
+COPY migrations/ /migrations/

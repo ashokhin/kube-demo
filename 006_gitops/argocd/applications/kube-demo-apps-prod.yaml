@@ -1,0 +1,37 @@
+# App of Apps — root Application for the production environment.
+# See kube-demo-apps.yaml for a full explanation of the App of Apps pattern.
+#
+# Production safety settings:
+#   selfHeal: true  — manual kubectl changes in prod are reverted; git is the only
+#                     authoritative source of truth for the cluster state.
+#   prune: false    — resources are NEVER auto-deleted, even if removed from git.
+#                     Removing a service from prod requires explicit review: delete
+#                     the Application YAML via PR, merge, then manually confirm
+#                     deletion in the ArgoCD UI or with `argocd app delete`.
+#
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-demo-apps-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: kube-demo
+  source:
+    repoURL: https://github.com/ashokhin/gitops.git
+    targetRevision: HEAD
+    path: 006_gitops/argocd/applications/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      # prune: false for prod — never auto-delete resources.
+      # Require a deliberate human action to remove anything from production.
+      prune: false
+      # selfHeal: true — revert any drift caused by manual intervention.
+      # Prod must match git exactly at all times.
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

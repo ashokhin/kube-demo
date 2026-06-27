@@ -1,0 +1,14 @@
+# Environment-specific values for report-generator — dev environment.
+# This file is layered ON TOP of values.yaml by ArgoCD:
+#   helm.valueFiles: [values.yaml, values-dev.yaml]
+# Only values that differ from defaults are listed here.
+
+image:
+  repository: nexus.company.internal/kube-demo/report-generator
+  tag: "dev-latest"
+
+# Run every 30 minutes in dev for rapid iteration and testing.
+schedule: "*/30 * * * *"
+
+config:
+  REPORT_PERIOD_DAYS: "1"

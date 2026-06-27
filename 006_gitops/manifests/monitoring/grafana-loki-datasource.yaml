@@ -1,0 +1,33 @@
+# Grafana datasource ConfigMap — automatically adds Loki as a datasource in Grafana.
+# Grafana sidecar discovers ConfigMaps with label grafana_datasource=1.
+# No manual UI configuration needed.
+#
+# How it works:
+#   kube-prometheus-stack deploys Grafana with a sidecar container that watches
+#   for ConfigMaps labeled grafana_datasource=1 in the same namespace.
+#   When this ConfigMap is created, the sidecar picks it up and hot-reloads
+#   the datasource into Grafana without a pod restart.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-loki-datasource
+  namespace: kube-monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  loki-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.kube-monitoring.svc.cluster.local:3100
+        isDefault: false
+        jsonData:
+          maxLines: 1000
+          # Link Loki logs to Prometheus metrics using shared labels.
+          # In Grafana Explore: click a log line → jump to metrics for the same pod.
+          derivedFields:
+            - name: TraceID
+              matcherRegex: '"trace_id":"(\w+)"'
+              url: '$${__value.raw}'

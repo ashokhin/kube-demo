@@ -1,0 +1,19 @@
+# SOURCE: helm/report-generator/templates/configmap.yaml
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-demo-report-generator
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: report-generator-0.1.0
+    app.kubernetes.io/name: report-generator
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  LOG_LEVEL: "INFO"
+  # Path inside the container where reports are written.
+  # Must match the PVC mountPath in the CronJob pod spec.
+  REPORT_OUTPUT_PATH: "/reports"
+  REPORT_PERIOD_DAYS: "7"

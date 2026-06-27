@@ -1,0 +1,48 @@
+# SOURCE: helm/api-gateway/templates/hpa.yaml
+# GENERATED FROM:
+#   .Values.autoscaling.enabled                      → {{- if .Values.autoscaling.enabled }} guard
+#   .Values.autoscaling.minReplicas                  → spec.minReplicas
+#   .Values.autoscaling.maxReplicas                  → spec.maxReplicas
+#   .Values.autoscaling.targetCPUUtilizationPercentage → metrics[0].resource.target.averageUtilization
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: kube-demo-api-gateway
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: api-gateway-0.1.0
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    # Must match Deployment metadata.name exactly.
+    name: kube-demo-api-gateway
+
+  # HPA keeps the replica count between these bounds.
+  # It will never scale below minReplicas even if CPU is 0%.
+  # minReplicas >= 2 ensures high availability across nodes.
+  minReplicas: 2
+  maxReplicas: 10
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # HPA calculates: current CPU usage / requests.cpu × 100
+          # If average across all pods > 70% → scale up.
+          # If average < 70% (with cooldown) → scale down.
+          #
+          # This value only makes sense relative to resources.requests.cpu.
+          # If requests.cpu=100m and a pod uses 75m → 75% → scale up.
+          averageUtilization: 70
+
+  # Default scale-down stabilization: 300s (5 min).
+  # HPA waits this long before scaling down to avoid flapping.
+  # Can be tuned via spec.behavior.scaleDown.stabilizationWindowSeconds.

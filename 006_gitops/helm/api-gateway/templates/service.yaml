@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "api-gateway.fullname" . }}
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+spec:
+  # ClusterIP: service is reachable only inside the cluster.
+  # External traffic comes through Ingress, not directly through the Service.
+  type: {{ .Values.service.type }}
+  selector:
+    # Must match pod labels defined in selectorLabels.
+    # The Service forwards traffic to any pod with these labels.
+    {{- include "api-gateway.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP

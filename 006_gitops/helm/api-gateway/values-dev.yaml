@@ -1,0 +1,27 @@
+# Environment-specific values for api-gateway — dev environment.
+# This file is layered ON TOP of values.yaml by ArgoCD:
+#   helm.valueFiles: [values.yaml, values-dev.yaml]
+# Only values that differ from defaults are listed here.
+
+image:
+  repository: nexus.company.internal/kube-demo/api-gateway
+  tag: "dev-latest"
+
+replicaCount: 1
+
+config:
+  LOG_LEVEL: "DEBUG"
+
+ingress:
+  host: "api.dev.kube-demo.internal"
+
+autoscaling:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi

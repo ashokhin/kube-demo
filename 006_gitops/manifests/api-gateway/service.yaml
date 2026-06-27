@@ -1,0 +1,46 @@
+# SOURCE: helm/api-gateway/templates/service.yaml
+# GENERATED FROM:
+#   .Values.service.type       → spec.type
+#   .Values.service.port       → spec.ports[0].port
+#   .Values.service.targetPort → spec.ports[0].targetPort
+#   _helpers.tpl               → metadata.name, selector labels
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-demo-api-gateway
+  namespace: kube-demo
+  labels:
+    helm.sh/chart: api-gateway-0.1.0
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/instance: kube-demo
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  # ClusterIP: the Service gets a stable virtual IP reachable only inside the cluster.
+  # Kubernetes kube-proxy routes traffic from this IP to one of the matching pods.
+  #
+  # Other types for reference:
+  #   NodePort    — also opens a port on every node (for direct external access, no LB)
+  #   LoadBalancer — provisions a cloud load balancer (expensive, one per service)
+  #   ExternalName — DNS alias to an external hostname (no proxying)
+  #
+  # The recommended pattern: ClusterIP + Ingress (one LB for all services).
+  type: ClusterIP
+
+  selector:
+    # The Service routes traffic to pods whose labels match ALL of these.
+    # Must match spec.template.metadata.labels in the Deployment.
+    # Source: _helpers.tpl → "api-gateway.selectorLabels"
+    app.kubernetes.io/name: api-gateway
+    app.kubernetes.io/instance: kube-demo
+
+  ports:
+    - name: http
+      # port: the port clients use to reach the Service (inside the cluster).
+      # Other services call: http://kube-demo-api-gateway:80
+      port: 80
+      # targetPort: the port the container actually listens on.
+      # Translates: Service:80 → Pod:8080
+      targetPort: 8080
+      protocol: TCP
