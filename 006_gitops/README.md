@@ -201,9 +201,18 @@ graph TD
         S6 -->|"main only"| S7["7. Promote\nhelm lint + git"]
     end
 
-    Jenkins -->|"image.tag: main-a1b2c3d"| GitOps[("gitops repo")]
-    GitOps -->|"ArgoCD polls every 3 min"| ArgoCD["ArgoCD"]
-    ArgoCD -->|"helm upgrade"| K8s["☸ kube-demo-dev"]
+    Jenkins -->|"updates values-dev.yaml\nimage.tag: main-a1b2c3d"| GitOps[("gitops repo")]
+
+    GitOps --> ArgoCD["ArgoCD"]
+    ArgoCD -->|"auto-sync\nhelm upgrade"| Dev_NS["☸ kube-demo-dev"]
+
+    Dev_NS -->|"validated ✓\nPromote job"| GitOps2[("gitops repo")]
+    GitOps2 -->|"updates values-staging.yaml"| ArgoCD2["ArgoCD"]
+    ArgoCD2 -->|"auto-sync\nhelm upgrade"| Staging["☸ kube-demo-staging"]
+
+    Staging -->|"sign-off ✓\nPR review"| GitOps3[("gitops repo")]
+    GitOps3 -->|"updates values-prod.yaml\n2-engineer approval"| ArgoCD3["ArgoCD"]
+    ArgoCD3 -->|"manual sync\nhelm upgrade"| Prod["☸ kube-demo-prod"]
 ```
 
 **Quality gates in the pipeline:**
