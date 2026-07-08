@@ -2,11 +2,13 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-RUN pip install --upgrade pip && \
+# hadolint ignore=DL3013
+RUN pip install --upgrade --no-cache-dir pip && \
     pip install --no-cache-dir "poetry-core>=1.0.0"
 
 COPY pyproject.toml .
 COPY src/ ./src/
+COPY tests/ ./tests/
 RUN pip install --no-cache-dir --prefix=/install .
 
 
@@ -22,4 +24,4 @@ COPY --from=builder /build/src ./src
 USER appuser
 
 # Job: runs alembic migrations and exits
-CMD ["alembic", "--config", "src/alembic.ini", "upgrade", "head"]
+ENTRYPOINT ["alembic", "--config", "src/alembic.ini", "upgrade", "head"]

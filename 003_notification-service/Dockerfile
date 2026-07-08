@@ -2,11 +2,13 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-RUN pip install --upgrade pip && \
+# hadolint ignore=DL3013
+RUN pip install --upgrade --no-cache-dir pip && \
     pip install --no-cache-dir "flit-core>=3.9"
 
 COPY pyproject.toml .
 COPY src/ ./src/
+COPY tests/ ./tests/
 RUN pip install --no-cache-dir --prefix=/install .
 
 
@@ -26,4 +28,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"
 
-CMD ["python", "-m", "src.main"]
+ENTRYPOINT ["python", "-m", "src.main"]

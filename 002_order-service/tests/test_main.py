@@ -66,8 +66,8 @@ def test_create_order_returns_201():
     assert resp.json()["status"] == "pending"
     # The event must be published so the notification-service picks it up.
     mock_publish.assert_called_once()
-    _, kwargs = mock_publish.call_args
-    assert kwargs.get("event_type") == "order.created"
+    args, _ = mock_publish.call_args
+    assert args[0] == "order.created"
 
 
 def test_get_order_found():

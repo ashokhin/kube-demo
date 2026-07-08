@@ -25,7 +25,9 @@ SERVICE_NAMES := \
 RUFF_IMAGE     := ghcr.io/astral-sh/ruff:latest
 HADOLINT_IMAGE := hadolint/hadolint:latest
 
-.PHONY: help lint lint-docker test build up down migrate report logs
+.PHONY: help lint lint-docker docker-lint test build up down migrate report logs
+
+docker-lint: lint-docker
 
 # Default target: print available targets with descriptions
 help:
@@ -87,7 +89,8 @@ test:
 	        "$$svc"; \
 	    docker run --rm \
 	        "$$img:test-$$sha" \
-	        sh -c "pip install --no-cache-dir pytest pytest-asyncio respx && \
+	        sh -c "cp -r /install/. /usr/local/ && \
+	               pip install --no-cache-dir pytest pytest-asyncio respx && \
 	               pytest tests/ -v --tb=short"; \
 	    docker rmi "$$img:test-$$sha" || true; \
 	done

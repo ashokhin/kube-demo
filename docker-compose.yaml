@@ -46,7 +46,7 @@ services:
     restart: unless-stopped
 
   rabbitmq:
-    image: rabbitmq:3.12-management
+    image: rabbitmq:4.2.8-management-alpine
     environment:
       RABBITMQ_DEFAULT_USER: orders_user
       # Demo-only password — change before any real deployment

@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -10,10 +10,7 @@ class Settings(BaseSettings):
     port: int = 8080
     log_level: str = "INFO"
 
-    class Config:
-        # In local development, pydantic-settings also reads from .env file.
-        # In Kubernetes, .env does not exist — env vars come from ConfigMap/Secret.
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env")
 
 
 # Module-level singleton: settings are read once at import time.

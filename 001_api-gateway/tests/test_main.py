@@ -22,13 +22,10 @@ def mock_http_client(respx_mock):
     Inject a mock HTTP client before each test.
 
     respx_mock (from pytest-respx) intercepts httpx calls by pattern.
-    We point _http_client at a client backed by this mock transport,
-    so the gateway thinks it is talking to order-service.
+    We point _http_client at a client backed by respx_mock, which patches httpx
+    globally for the duration of the test so all requests are intercepted.
     """
-    client = httpx.AsyncClient(
-        base_url="http://order-service",
-        transport=respx_mock,
-    )
+    client = httpx.AsyncClient(base_url="http://order-service")
     main_module._http_client = client
     yield
     # Reset to None after each test so tests are fully isolated.
